@@ -37,7 +37,6 @@ export function getFramePath(frame: Frame): string {
 }
 
 export async function digestFrame(frame: Frame, observationId: string): Promise<DigestElement[]> {
-  const framePath = getFramePath(frame);
   // tsx/esbuild may preserve callback names with this helper. Browser-evaluated
   // callbacks are serialized without the module prelude, so provide the tiny
   // identity helper inside each frame before evaluating the digest function.
@@ -125,6 +124,11 @@ export async function digestFrame(frame: Frame, observationId: string): Promise<
     });
   }, observationId);
 
+  // Resolve the frame path only after the evaluate settled: during an iframe
+  // swap the not-yet-loaded frame briefly reports no name, which previously
+  // labeled digest elements "anonymous-frame" while captured locators said
+  // "workarea" for the same frame.
+  const framePath = getFramePath(frame);
   return raw.map(({ localRef, ...element }) => ({ ...element, ref: localRef, frame: framePath }));
 }
 

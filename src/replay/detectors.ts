@@ -19,8 +19,8 @@ export async function predicateMatches(
       return new RegExp(predicate.pattern).test(observation.url);
     case "dialog_present":
       return observation.elements.some((element) => element.role === "dialog" && new RegExp(predicate.textPattern, "i").test(`${element.name} ${element.text ?? ""}`));
-    case "load_timeout":
     case "value_equals_param":
+      // Needs the invocation parameters; the replay engine evaluates it directly.
       return false;
   }
 }

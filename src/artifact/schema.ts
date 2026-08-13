@@ -44,8 +44,7 @@ export const predicateSchema = z.discriminatedUnion("kind", [
   strict({ kind: z.literal("element_present"), target: targetSchema }),
   strict({ kind: z.literal("value_equals_param"), param: z.string() }),
   strict({ kind: z.literal("url_matches"), pattern: z.string() }),
-  strict({ kind: z.literal("dialog_present"), textPattern: z.string() }),
-  strict({ kind: z.literal("load_timeout") })
+  strict({ kind: z.literal("dialog_present"), textPattern: z.string() })
 ]);
 
 const stepSchema = strict({
@@ -64,11 +63,7 @@ const stepSchema = strict({
 const recoverySchema = strict({
   id: z.string(),
   condition: predicateSchema,
-  action: z.discriminatedUnion("kind", [
-    strict({ kind: z.literal("click"), target: targetSchema }),
-    strict({ kind: z.literal("retry_wait") })
-  ]),
-  backoff_ms: z.array(z.number().int().nonnegative()).optional(),
+  action: strict({ kind: z.literal("click"), target: targetSchema }),
   max_attempts: z.number().int().positive()
 });
 

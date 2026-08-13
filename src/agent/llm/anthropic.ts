@@ -23,8 +23,9 @@ export class AnthropicClient implements LLMClient {
         system: request.system,
         messages: [{ role: "user", content: JSON.stringify({ goal: request.goal, marked_outputs: request.markedOutputs, observation: request.observation, history: request.history }) }],
         tools: agentTools.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.parameters })),
-        tool_choice: { type: "any" },
-        temperature: 0
+        // No sampling parameters: current Claude models (Sonnet 5 / Opus 5)
+        // reject non-default temperature, so the client stays model-portable.
+        tool_choice: { type: "any" }
       })
     });
     const payload = await response.json() as AnthropicResponse;

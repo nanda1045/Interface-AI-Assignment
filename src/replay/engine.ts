@@ -53,6 +53,18 @@ function materializeAction(step: CapabilityArtifact["steps"][number], params: Re
   }
 }
 
+// The artifact's own allowlist is enforced in addition to the operator policy
+// file, so a capability can never act beyond what its reviewers approved.
+function artifactPolicyViolation(artifact: CapabilityArtifact, action: AbstractAction): string | undefined {
+  if (!artifact.policy.allowed_actions.includes(action.kind)) return `Action ${action.kind} is outside the artifact's allowed_actions.`;
+  if (action.kind === "navigate") {
+    let origin: string;
+    try { origin = new URL(action.url).origin; } catch { return "Navigation target is not an absolute URL."; }
+    if (!artifact.policy.allowed_origins.includes(origin)) return `Origin ${origin} is outside the artifact's allowed_origins.`;
+  }
+  return undefined;
+}
+
 function recordTier(stats: TierStats, step: string, resolution: ResolvedElement): void {
   stats.resolutions += 1;
   stats.matched_tiers[String(resolution.tier)] = (stats.matched_tiers[String(resolution.tier)] ?? 0) + 1;
@@ -111,6 +123,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   }
 
   const entryAction: AbstractAction = { kind: "navigate", url: artifact.entry.url };
+  const entryViolation = artifactPolicyViolation(artifact, entryAction);
+  if (entryViolation) return fail("policy_blocked", "An entry URL inside the artifact's own allowlist.", entryViolation);
   const entryVerdict = policy.check(entryAction, { risk: "read_only" });
   await logger.event({ type: "policy_check", step: 0, verdict: entryVerdict });
   if (!entryVerdict.allowed) return fail("policy_blocked", "Allowlisted capability entry URL.", entryVerdict.detail);
@@ -157,6 +171,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
         recordTier(stats, step.id, resolution);
       }
       const action = materializeAction(step, params, resolved?.ref);
+      const stepViolation = artifactPolicyViolation(artifact, action);
+      if (stepViolation) return fail("policy_blocked", "An action inside the artifact's own allowlist.", stepViolation);
       const targetElement = resolved ? observation.elements.find((element) => element.ref === resolved?.ref) : undefined;
       const risk = inferRisk(action, targetElement?.name ?? currentIntent);
       const verdict = policy.check(action, { risk, allowMutations: artifact.capability.status === "approved" || options.confirmMutations, targetName: targetElement?.name });
@@ -211,6 +227,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   const result: ReplayResult = { status: "success", outputs, evidence: logger.directory, stability: stats, ...interventionPart() };
   await logger.event({ type: "result", status: "success", detail: result });
   await logger.result(result);
+  await logger.finalizeRedaction();
   return result;
 
   async function detectOutcome(stepId: string, observation: Observation): Promise<ReplayResult | undefined> {
@@ -221,6 +238,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
         await logger.event({ type: "detector_hit", step: Number(stepId.replace(/^s/, "")) || 0, detector: outcome.code, classification: "business_outcome" });
         await logger.event({ type: "result", status: "business_outcome", detail: result });
         await logger.result(result);
+        await logger.finalizeRedaction();
         return result;
       }
     }
@@ -233,16 +251,12 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       const attempts = recoveryAttempts.get(rule.id) ?? 0;
       if (attempts >= rule.max_attempts) return false;
       recoveryAttempts.set(rule.id, attempts + 1);
-      if (rule.action.kind === "retry_wait") {
-        await new Promise((resolve) => setTimeout(resolve, rule.backoff_ms?.[0] ?? 250));
-        await logger.event({ type: "recovery_applied", step: stepNumber, rule: rule.id });
-        return true;
-      }
       const resolution = await surface.resolve(rule.action.target);
       lastAttempts = resolution.attempts;
       if (!resolution.ok) return false;
       recordTier(stats, `recovery:${rule.id}`, resolution);
       const action: AbstractAction = { kind: "click", ref: resolution.ref };
+      if (artifactPolicyViolation(artifact, action)) return false;
       const verdict = policy.check(action, { risk: "read_only" });
       await logger.event({ type: "policy_check", step: stepNumber, verdict });
       if (!verdict.allowed) return false;
@@ -306,10 +320,13 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   async function fail(failureClass: FailureClass, expected: string, observed: string): Promise<ReplayResult> {
     let observation: Observation | undefined;
     try { observation = await surface.observe({ screenshot: !sensitiveRun }); } catch { observation = undefined; }
-    const bundle = await logger.failureBundle({ screenshot: observation?.screenshot, dom: await surface.snapshotDom(), ...(lastAttempts ? { attempts: lastAttempts } : {}) });
+    let dom = "DOM snapshot unavailable: the browser session was no longer reachable.";
+    try { dom = await surface.snapshotDom(); } catch { /* keep the fallback so the failure result itself survives */ }
+    const bundle = await logger.failureBundle({ screenshot: observation?.screenshot, dom, ...(lastAttempts ? { attempts: lastAttempts } : {}) });
     const result: ReplayResult = { status: "failure", failure: { class: failureClass, step: currentStep, intent: currentIntent, expected, observed, ...bundle }, evidence: logger.directory, ...interventionPart() };
     await logger.event({ type: "result", status: "failure", detail: result });
     await logger.result(result);
+    await logger.finalizeRedaction();
     return result;
   }
 }
