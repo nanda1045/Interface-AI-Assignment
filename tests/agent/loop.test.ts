@@ -34,6 +34,7 @@ class FakeSurface implements Surface {
 
   public async captureLocators(): Promise<LocatorBundle> { return bundle; }
   public async resolve() { return { ok: false as const, reason: "target_not_found" as const, attempts: [] }; }
+  public async read() { return { text: "" }; }
   public async snapshotDom() { return "<html></html>"; }
   public async close() {}
 }

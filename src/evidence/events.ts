@@ -8,7 +8,9 @@ export type RunEvent =
   | { type: "policy_check"; step: number; verdict: PolicyVerdict }
   | { type: "action"; step: number; action: AbstractAction; locators?: LocatorBundle; resultUrl: string }
   | { type: "output_marked"; step: number; name: string; locators: LocatorBundle }
+  | { type: "detector_hit"; step: number; detector: string; classification: string }
+  | { type: "recovery_applied"; step: number; rule: string }
   | { type: "stopped"; reason: string }
-  | { type: "result"; status: "success" | "escalated" | "failure"; detail: unknown };
+  | { type: "result"; status: "success" | "business_outcome" | "escalated" | "failure"; detail: unknown };
 
 export type PersistedRunEvent = RunEvent & { at: string; runId: string };

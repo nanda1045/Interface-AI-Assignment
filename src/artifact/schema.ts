@@ -5,10 +5,11 @@ const strict = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 const roleName = strict({ kind: z.literal("role_name"), role: z.string(), name: z.string(), frame: z.string(), unique: z.literal(true), confidence: z.number().min(0).max(1) });
 const labelProximity = strict({ kind: z.literal("label_proximity"), label: z.string(), control: z.string(), frame: z.string(), unique: z.literal(true), confidence: z.number().min(0).max(1) });
 const text = strict({ kind: z.literal("text"), value: z.string(), control: z.string().optional(), frame: z.string(), unique: z.literal(true), confidence: z.number().min(0).max(1) });
+const labelAdjacentCell = strict({ kind: z.literal("label_adjacent_cell"), label: z.string(), frame: z.string(), unique: z.literal(true), confidence: z.number().min(0).max(1) });
 const attrCss = strict({ kind: z.literal("attr_css"), value: z.string(), frame: z.string(), unique: z.literal(true), confidence: z.number().min(0).max(1) });
 const structural = strict({ kind: z.literal("structural"), value: z.string(), frame: z.string(), unique: z.literal(true), confidence: z.number().min(0).max(1) });
 const geometry = strict({ kind: z.literal("geometry"), bboxPct: z.tuple([z.number(), z.number(), z.number(), z.number()]), nearText: z.string().optional(), frame: z.string(), unique: z.literal(true), confidence: z.number().min(0).max(1) });
-export const locatorStrategySchema = z.discriminatedUnion("kind", [roleName, labelProximity, text, attrCss, structural, geometry]);
+export const locatorStrategySchema = z.discriminatedUnion("kind", [roleName, labelProximity, text, labelAdjacentCell, attrCss, structural, geometry]);
 export const targetSchema = strict({ frame: z.string().optional(), strategies: z.array(locatorStrategySchema).min(1) });
 
 const jsonPropertySchema = strict({

@@ -17,6 +17,7 @@ beforeAll(async () => {
       <html><body>
         <h2>Member Search</h2>
         <table><tr><td>Member No.</td><td><input name='f_mno'></td></tr></table>
+        <table><tr><td>Regular Savings</td><td>$2,481.13</td></tr></table>
         <a href='#member'>Open Member</a>
         <button>Search</button>
       </body></html>
@@ -48,6 +49,14 @@ describe("WebSurface", () => {
     expect(bundle.strategies.map((strategy) => strategy.kind)).toEqual(["label_proximity", "attr_css", "structural", "geometry"]);
     expect(bundle.strategies.every((strategy) => strategy.unique)).toBe(true);
     expect(bundle.strategies.map((strategy) => strategy.confidence)).toEqual([...bundle.strategies.map((strategy) => strategy.confidence)].sort((a, b) => b - a));
+  });
+
+  it("observes table outputs and captures a value-independent adjacent-cell locator", async () => {
+    const observation = await surface.observe();
+    const balance = observation.elements.find((element) => element.role === "cell" && element.text === "$2,481.13");
+    expect(balance).toBeDefined();
+    const bundle = await surface.captureLocators(balance!.ref);
+    expect(bundle.strategies[0]).toMatchObject({ kind: "label_adjacent_cell", label: "Regular Savings", frame: "workarea", unique: true });
   });
 
   it("resolves role, label, text, attribute, structural, and geometry tiers inside frames", async () => {

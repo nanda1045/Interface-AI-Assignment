@@ -39,6 +39,7 @@ export type LocatorStrategy =
   | (LocatorStrategyBase & { kind: "role_name"; role: string; name: string })
   | (LocatorStrategyBase & { kind: "label_proximity"; label: string; control: string })
   | (LocatorStrategyBase & { kind: "text"; value: string; control?: string })
+  | (LocatorStrategyBase & { kind: "label_adjacent_cell"; label: string })
   | (LocatorStrategyBase & { kind: "attr_css"; value: string })
   | (LocatorStrategyBase & { kind: "structural"; value: string })
   | (LocatorStrategyBase & { kind: "geometry"; bboxPct: [number, number, number, number]; nearText?: string });
@@ -84,6 +85,7 @@ export interface Surface {
   act(action: AbstractAction): Promise<ActResult>;
   captureLocators(ref: ElementRef): Promise<LocatorBundle>;
   resolve(target: TargetSpec): Promise<ResolvedElement | ResolutionFailure>;
+  read(ref: ElementRef): Promise<{ text: string; value?: string }>;
   snapshotDom(): Promise<string>;
   close(): Promise<void>;
 }

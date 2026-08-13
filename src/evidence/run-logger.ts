@@ -39,6 +39,20 @@ export class RunLogger {
   public async result(value: unknown): Promise<void> {
     await writeFile(path.join(this.directory, "result.json"), `${JSON.stringify(redactValue(value, [...this.sensitiveValues]), null, 2)}\n`, "utf8");
   }
+
+  public async failureBundle(options: { screenshot?: string; dom: string; attempts?: unknown }): Promise<{ screenshot?: string; domSnapshot: string; resolutionAttempts?: string }> {
+    const output: { screenshot?: string; domSnapshot: string; resolutionAttempts?: string } = { domSnapshot: "failure/dom.html" };
+    await writeFile(path.join(this.directory, output.domSnapshot), redactValue(options.dom, [...this.sensitiveValues]), "utf8");
+    if (options.screenshot) {
+      output.screenshot = "failure/final.png";
+      await writeFile(path.join(this.directory, output.screenshot), Buffer.from(options.screenshot.replace(/^data:image\/png;base64,/, ""), "base64"));
+    }
+    if (options.attempts) {
+      output.resolutionAttempts = "failure/resolution-attempts.json";
+      await writeFile(path.join(this.directory, output.resolutionAttempts), `${JSON.stringify(redactValue(options.attempts, [...this.sensitiveValues]), null, 2)}\n`, "utf8");
+    }
+    return output;
+  }
 }
 
 export function createRunId(prefix: "disc" | "replay", now = new Date()): string {

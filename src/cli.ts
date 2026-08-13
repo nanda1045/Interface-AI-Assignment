@@ -7,9 +7,11 @@ import { AnthropicClient } from "./agent/llm/anthropic.js";
 import type { LLMClient } from "./agent/llm/client.js";
 import { OpenAIClient } from "./agent/llm/openai.js";
 import { distillDiscovery } from "./artifact/distill.js";
+import { applyOverlay, loadOverlay } from "./artifact/overlay.js";
 import { ArtifactStore } from "./artifact/store.js";
 import { createRunId, RunLogger } from "./evidence/run-logger.js";
 import { PolicyEngine } from "./policy/engine.js";
+import { replay } from "./replay/engine.js";
 import { WebSurface } from "./surface/web-playwright.js";
 
 function chooseClient(provider: "openai" | "anthropic"): LLMClient {
@@ -88,6 +90,38 @@ program.command("approve")
   .action(async (reference: string, raw: { by: string }) => {
     const artifact = await new ArtifactStore().approve(reference, raw.by);
     console.log(JSON.stringify({ id: artifact.capability.id, version: artifact.capability.version, status: artifact.capability.status, approvedBy: artifact.capability.provenance.approved_by }, null, 2));
+  });
+
+program.command("replay")
+  .argument("<reference>", "capability@version")
+  .option("--param <name=value>", "capability parameter", (value, previous: string[]) => [...previous, value], [])
+  .option("--policy <path>", "policy YAML", "policies/default.yaml")
+  .option("--artifact-root <path>", "artifact directory", "artifacts")
+  .option("--overlay <path>", "tenant overlay JSON")
+  .option("--chaos <flags>", "comma-separated mock-app chaos flags")
+  .option("--headless", "run without a visible browser", false)
+  .option("--confirm-mutations", "interactively approved this mutating replay", false)
+  .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
+  .action(async (reference: string, raw: { param: string[]; policy: string; artifactRoot: string; overlay?: string; chaos?: string; headless: boolean; confirmMutations: boolean; mockAuth: boolean }) => {
+    const store = new ArtifactStore(raw.artifactRoot);
+    let artifact = await store.load(reference);
+    if (raw.overlay) artifact = applyOverlay(artifact, await loadOverlay(raw.overlay));
+    const browser = await chromium.launch({ headless: raw.headless });
+    const context = await browser.newContext();
+    const entry = new URL(artifact.entry.url);
+    if (raw.mockAuth) {
+      if (!["http://localhost:4478", "http://localhost:4479"].includes(entry.origin)) throw new Error("--mock-auth is restricted to the fictional local CorePoint app.");
+      await context.addCookies([{ name: "cp_session", value: `teller:${entry.port === "4479" ? "b" : "a"}`, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
+    }
+    if (raw.chaos) await context.addCookies([{ name: "cp_chaos", value: raw.chaos, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
+    const surface = new WebSurface(await context.newPage(), { browser, context });
+    try {
+      const result = await replay({ artifact, params: parseAssignments(raw.param), surface, policy: await PolicyEngine.fromFile(raw.policy), logger: new RunLogger(createRunId("replay")), confirmMutations: raw.confirmMutations });
+      console.log(JSON.stringify(result, null, 2));
+      if (result.status === "failure") process.exitCode = 1;
+    } finally {
+      await surface.close();
+    }
   });
 
 await program.parseAsync();

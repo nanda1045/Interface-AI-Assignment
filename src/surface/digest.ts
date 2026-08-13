@@ -18,6 +18,8 @@ const digestSelector = [
   "h1",
   "h2",
   "h3",
+  "th",
+  "td",
   "[aria-live]",
   ".notice"
 ].join(",");
@@ -26,7 +28,9 @@ export function getFramePath(frame: Frame): string {
   const segments: string[] = [];
   let current: Frame | null = frame;
   while (current?.parentFrame()) {
-    segments.unshift(current.name() || new URL(current.url()).pathname || "anonymous-frame");
+    let urlPath = "";
+    try { urlPath = new URL(current.url()).pathname; } catch { urlPath = ""; }
+    segments.unshift(current.name() || urlPath || "anonymous-frame");
     current = current.parentFrame();
   }
   return segments.length === 0 ? "main" : segments.join(" > ");
@@ -43,6 +47,8 @@ export async function digestFrame(frame: Frame, observationId: string): Promise<
       if (tag === "select") return "combobox";
       if (tag === "textarea") return "textbox";
       if (tag === "h1" || tag === "h2" || tag === "h3") return "heading";
+      if (tag === "th") return "columnheader";
+      if (tag === "td") return "cell";
       if (tag === "input") {
         const type = (element.getAttribute("type") ?? "text").toLowerCase();
         if (["button", "submit", "reset"].includes(type)) return "button";
@@ -88,7 +94,7 @@ export async function digestFrame(frame: Frame, observationId: string): Promise<
       htmlElement.setAttribute("data-cu-ref", localRef);
       const role = element.getAttribute("role") ?? implicitRole(element);
       const text = clean(element.textContent);
-      const nearLabel = nearbyLabel(element);
+      const nearLabel = ["input", "select", "textarea", "button"].includes(element.tagName.toLowerCase()) ? nearbyLabel(element) : "";
       const semanticName = clean(element.getAttribute("aria-label")) ||
         clean(element.getAttribute("title")) ||
         (role === "textbox" || role === "combobox" ? nearLabel : text) ||

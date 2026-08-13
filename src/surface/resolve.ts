@@ -1,6 +1,6 @@
 import type { Frame, Locator, Page } from "playwright";
 import { getFramePath } from "./digest.js";
-import { locatorForNearbyLabel } from "./locators.js";
+import { locatorForAdjacentCell, locatorForNearbyLabel } from "./locators.js";
 import type { LocatorStrategy, ResolutionAttempt, ResolutionFailure, ResolvedElement, TargetSpec } from "./types.js";
 
 function findFrame(page: Page, path: string): Frame | undefined {
@@ -35,6 +35,8 @@ async function strategyLocator(frame: Frame, strategy: LocatorStrategy): Promise
       return { locator: await locatorForNearbyLabel(frame, strategy.label, strategy.control) };
     case "text":
       return { locator: strategy.control ? frame.locator(strategy.control).filter({ hasText: strategy.value }) : frame.getByText(strategy.value, { exact: true }) };
+    case "label_adjacent_cell":
+      return { locator: locatorForAdjacentCell(frame, strategy.label) };
     case "attr_css":
       return { locator: frame.locator(strategy.value) };
     case "structural":

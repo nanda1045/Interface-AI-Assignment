@@ -36,14 +36,26 @@ export class WebSurface implements Surface {
   public async observe(options: { screenshot?: boolean } = {}): Promise<Observation> {
     this.observationSequence += 1;
     const observationId = `o${this.observationSequence}`;
-    const elements = (await Promise.all(this.page.frames().map((frame, index) => digestFrame(frame, `${observationId}f${index}`)))).flat();
+    let elements: DigestElement[] | undefined;
+    let frames = this.page.frames();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        frames = this.page.frames();
+        elements = (await Promise.all(frames.map((frame, index) => digestFrame(frame, `${observationId}f${index}`)))).flat();
+        break;
+      } catch (error) {
+        if (!/Execution context was destroyed|Frame was detached|Target page, context or browser has been closed/i.test(String(error)) || attempt === 4) throw error;
+        await this.page.waitForTimeout(75);
+      }
+    }
+    if (!elements) throw new Error("Could not observe a stable browser state.");
     this.observedElements.clear();
     for (const element of elements) this.observedElements.set(element.ref, element);
     const screenshot = options.screenshot ? `data:image/png;base64,${(await this.page.screenshot()).toString("base64")}` : undefined;
     return {
       url: this.page.url(),
       title: await this.page.title(),
-      frames: this.page.frames().map(getFramePath),
+      frames: frames.map(getFramePath),
       elements,
       ...(screenshot ? { screenshot } : {}),
       stateHash: stateHash(elements, this.page.url())
@@ -91,6 +103,13 @@ export class WebSurface implements Surface {
 
   public resolve(target: TargetSpec): Promise<ResolvedElement | ResolutionFailure> {
     return resolveTarget(this.page, target, () => this.nextRef("r"));
+  }
+
+  public async read(ref: ElementRef): Promise<{ text: string; value?: string }> {
+    const locator = await this.locatorForRef(ref);
+    const text = (await locator.textContent() ?? "").replace(/\s+/g, " ").trim();
+    const value = await locator.evaluate((element) => "value" in element ? String((element as HTMLInputElement).value) : undefined);
+    return { text, ...(value !== undefined ? { value } : {}) };
   }
 
   public async snapshotDom(): Promise<string> {

@@ -69,6 +69,10 @@ export async function locatorForNearbyLabel(frame: Frame, label: string, control
   return matches.length === 1 ? candidates.nth(matches[0] ?? -1) : candidates.filter({ has: frame.locator(":scope:not(*)") });
 }
 
+export function locatorForAdjacentCell(frame: Frame, label: string): Locator {
+  return frame.locator("td").filter({ hasText: label }).locator("xpath=following-sibling::td[1]");
+}
+
 export async function captureLocatorBundle(frame: Frame, element: DigestElement): Promise<LocatorBundle> {
   const localRef = element.ref;
   const source = frame.locator(`[data-cu-ref="${localRef}"]`);
@@ -78,7 +82,7 @@ export async function captureLocatorBundle(frame: Frame, element: DigestElement)
   const tag = await source.evaluate((node) => node.tagName.toLowerCase());
   const attributes = await source.evaluate((node) => ({ id: node.getAttribute("id"), name: node.getAttribute("name") }));
 
-  if (element.role && element.name) {
+  if (element.role && element.name && !["cell", "columnheader", "text"].includes(element.role)) {
     const candidate = frame.getByRole(element.role as Parameters<Frame["getByRole"]>[0], { name: element.name, exact: true });
     if (await sameNode(candidate, localRef)) strategies.push({ kind: "role_name", role: element.role, name: element.name, frame: framePath, unique: true, confidence: 0.9 });
   }
@@ -91,6 +95,13 @@ export async function captureLocatorBundle(frame: Frame, element: DigestElement)
   if (element.text && ["a", "button"].includes(tag)) {
     const candidate = frame.locator(tag).filter({ hasText: element.text });
     if (await sameNode(candidate, localRef)) strategies.push({ kind: "text", value: element.text, control: tag, frame: framePath, unique: true, confidence: 0.8 });
+  }
+
+  if (tag === "td") {
+    const previousText = await source.evaluate((node) => node.previousElementSibling?.textContent?.replace(/\s+/g, " ").trim() ?? "");
+    if (previousText && await sameNode(locatorForAdjacentCell(frame, previousText), localRef)) {
+      strategies.push({ kind: "label_adjacent_cell", label: previousText, frame: framePath, unique: true, confidence: 0.85 });
+    }
   }
 
   for (const attribute of ["name", "id"] as const) {
