@@ -1,6 +1,7 @@
+import type { HandoffCoordinator } from "../control/intervention.js";
 import type { RunLogger } from "../evidence/run-logger.js";
 import { inferRisk, type PolicyEngine } from "../policy/engine.js";
-import type { AbstractAction, LocatorBundle, Surface } from "../surface/types.js";
+import type { AbstractAction, LocatorBundle, Observation, Surface } from "../surface/types.js";
 import type { AgentDecision, LLMClient } from "./llm/client.js";
 import { discoverySystemPrompt } from "./prompts.js";
 
@@ -45,6 +46,7 @@ export async function runDiscovery(options: {
   logger: RunLogger;
   allowMutations?: boolean;
   expectedOutputs?: string[];
+  handoff?: HandoffCoordinator;
 }): Promise<DiscoveryResult> {
   const { goal, target, surface, policy, llm, logger } = options;
   const steps: RecordedStep[] = [];
@@ -71,7 +73,9 @@ export async function runDiscovery(options: {
     hashVisits.set(observation.stateHash, visits);
     const recentDecisions = history.slice(-2).map((entry) => entry.decision);
     if (visits >= 3 && recentDecisions.some((decision) => decision !== "note_output")) {
-      return finish("escalated", "The same UI state was observed three times; discovery is in a dead end.");
+      const reason = "The same UI state was observed three times; discovery is in a dead end.";
+      if (await humanUnblocked(step, observation, reason, "Unblock the flow in the live browser, then hand back.")) continue;
+      return finish("escalated", reason);
     }
     const screenshot = observation.screenshot ? await logger.screenshot(step, observation.screenshot) : undefined;
     await logger.event({ type: "observation", step, url: observation.url, title: observation.title, stateHash: observation.stateHash, elementCount: observation.elements.length, ...(screenshot ? { screenshot } : {}) });
@@ -85,7 +89,10 @@ export async function runDiscovery(options: {
     await logger.event({ type: "decision", step, reasoning: decision.reasoning, decision: decision.kind });
 
     if (decision.kind === "finish") return finish("success", "Goal completed.");
-    if (decision.kind === "escalate") return finish("escalated", decision.reason);
+    if (decision.kind === "escalate") {
+      if (await humanUnblocked(step, observation, decision.reason, "Resolve the blocker the agent reported, then hand back.")) continue;
+      return finish("escalated", decision.reason);
+    }
     if (decision.kind === "note_output") {
       if (!observation.elements.some((element) => element.ref === decision.ref)) return finish("failure", `Model selected stale or unknown ref ${decision.ref}.`);
       if (options.expectedOutputs?.length && !options.expectedOutputs.includes(decision.name)) {
@@ -118,7 +125,13 @@ export async function runDiscovery(options: {
     const risk = inferRisk(action, targetElement?.name ?? targetElement?.text ?? "");
     const verdict = policy.check(action, { risk, allowMutations: options.allowMutations, targetName: targetElement?.name });
     await logger.event({ type: "policy_check", step, verdict });
-    if (!verdict.allowed) return finish(verdict.rule === "irreversible_requires_human" ? "escalated" : "failure", verdict.detail);
+    if (!verdict.allowed) {
+      if (verdict.rule === "irreversible_requires_human") {
+        if (await humanUnblocked(step, observation, verdict.detail, "Perform or decline the irreversible step manually, then hand back.")) continue;
+        return finish("escalated", verdict.detail);
+      }
+      return finish("failure", verdict.detail);
+    }
     const locators = "ref" in action ? await surface.captureLocators(action.ref) : undefined;
     const result = await surface.act(action);
     steps.push({ step, reasoning: decision.reasoning, action, ...(locators ? { locators } : {}), beforeUrl: observation.url, afterUrl: result.url });
@@ -126,6 +139,30 @@ export async function runDiscovery(options: {
     history.push({ decision: decision.kind, result: `Action completed; URL is ${result.url}.` });
   }
   return finish("failure", `Discovery exceeded max_steps (${policy.config.max_steps}).`);
+
+  // A stuck discovery pauses into the same lease/console handoff as replay: the
+  // human resolves the blocker in the live session, hands back, and the loop
+  // re-observes instead of ending the run.
+  async function humanUnblocked(step: number, observation: Observation, reason: string, requestedAction: string): Promise<boolean> {
+    const handoff = options.handoff;
+    if (!handoff) return false;
+    await handoff.request({
+      runId: logger.runId,
+      capability: "discovery",
+      goal,
+      step: `step-${step}`,
+      intent: reason,
+      reason,
+      requestedAction,
+      ...(observation.screenshot ? { screenshot: observation.screenshot } : {}),
+      recentEvents: [{ url: observation.url, title: observation.title, stateHash: observation.stateHash }]
+    });
+    await handoff.resume();
+    hashVisits.clear();
+    duplicateOutputMarks = 0;
+    history.push({ decision: "handoff", result: "A human operator resolved the blocker in the live session; re-observe before deciding." });
+    return true;
+  }
 
   async function finish(status: DiscoveryResult["status"], reason: string): Promise<DiscoveryResult> {
     const result: DiscoveryResult = { status, runId: logger.runId, steps, outputs, ...(status === "success" ? {} : { reason }) };

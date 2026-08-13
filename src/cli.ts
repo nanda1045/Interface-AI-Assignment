@@ -51,10 +51,13 @@ program.command("discover")
   .option("--output <name>", "declared output name; repeat for multiple outputs", (value, previous: string[]) => [...previous, value], [])
   .option("--artifact-root <path>", "artifact directory", "artifacts")
   .option("--overwrite-artifact", "replace an existing artifact after a successful discovery", false)
+  .option("--handoff", "enable same-session human intervention when discovery is stuck", false)
+  .option("--console-port <port>", "operator console port", "4590")
   .option("--run-root <path>", "run evidence directory", "runs")
   .option("--run-id <id>", "explicit run id (useful for reproducible evidence)")
-  .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; capabilityId?: string; title?: string; description?: string; param: string[]; output: string[]; artifactRoot: string; overwriteArtifact: boolean; runRoot: string; runId?: string }) => {
+  .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; capabilityId?: string; title?: string; description?: string; param: string[]; output: string[]; artifactRoot: string; overwriteArtifact: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
     if (raw.provider !== "openai" && raw.provider !== "anthropic") throw new Error("--provider must be openai or anthropic.");
+    if (raw.handoff && raw.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
     const browser = await chromium.launch({ headless: raw.headless });
     const context = await browser.newContext();
     const target = new URL(raw.url);
@@ -63,12 +66,19 @@ program.command("discover")
       await context.addCookies([{ name: "cp_session", value: `teller:${target.port === "4479" ? "b" : "a"}`, url: target.origin, httpOnly: true, sameSite: "Lax" }]);
     }
     const page = await context.newPage();
-    const surface = new WebSurface(page, { browser, context });
-    const policy = await PolicyEngine.fromFile(raw.policy);
     const logger = new RunLogger(raw.runId ?? createRunId("disc"), raw.runRoot);
+    const controller = raw.handoff ? new RunController(logger) : undefined;
+    const surface = new WebSurface(page, { browser, context, ...(controller ? { canAgentAct: () => controller.lease.agentCanAct() } : {}) });
+    const consoleServer = controller ? await startConsole(controller, Number(raw.consolePort)) : undefined;
+    if (controller) {
+      await logger.initialize();
+      await installHumanRecorder(page, controller, logger);
+      console.error(`Operator console: http://127.0.0.1:${raw.consolePort}`);
+    }
+    const policy = await PolicyEngine.fromFile(raw.policy);
     const llm = chooseClient(raw.provider);
     try {
-      const result = await runDiscovery({ goal: raw.goal, target: raw.url, surface, policy, llm, logger, allowMutations: raw.allowMutations, expectedOutputs: raw.output });
+      const result = await runDiscovery({ goal: raw.goal, target: raw.url, surface, policy, llm, logger, allowMutations: raw.allowMutations, expectedOutputs: raw.output, ...(controller ? { handoff: controller } : {}) });
       if (result.status === "success" && raw.capabilityId) {
         const params = parseAssignments(raw.param);
         const artifact = distillDiscovery(result, {
@@ -90,6 +100,7 @@ program.command("discover")
       console.log(JSON.stringify(result, null, 2));
       if (result.status === "failure") process.exitCode = 1;
     } finally {
+      if (consoleServer) await new Promise<void>((resolve, reject) => consoleServer.close((error) => error ? reject(error) : resolve()));
       await surface.close();
     }
   });

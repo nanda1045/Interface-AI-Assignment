@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runDiscovery } from "../../src/agent/loop.js";
 import type { AgentDecision, LLMClient } from "../../src/agent/llm/client.js";
+import type { HandoffCoordinator, InterventionContext, InterventionRequest } from "../../src/control/intervention.js";
 import { RunLogger } from "../../src/evidence/run-logger.js";
 import { PolicyEngine, type PolicyConfig } from "../../src/policy/engine.js";
 import type { AbstractAction, LocatorBundle, Observation, Surface } from "../../src/surface/types.js";
@@ -37,6 +38,18 @@ class FakeSurface implements Surface {
   public async read() { return { text: "$2,481.13" }; }
   public async snapshotDom() { return "<html></html>"; }
   public async close() {}
+}
+
+class FakeCoordinator implements HandoffCoordinator {
+  public requests: InterventionContext[] = [];
+
+  public async request(context: InterventionContext): Promise<InterventionRequest> {
+    this.requests.push(context);
+    return { ...context, id: `int_${this.requests.length}`, status: "handed_back", requestedAt: "2026-08-13T00:00:00.000Z" };
+  }
+
+  public async resume(): Promise<void> {}
+  public summary() { return { count: this.requests.length, requestIds: this.requests.map((_, index) => `int_${index + 1}`) }; }
 }
 
 class SequenceClient implements LLMClient {
@@ -119,5 +132,28 @@ describe("runDiscovery", () => {
     });
 
     expect(result).toMatchObject({ status: "success", outputs: { member_name: bundle } });
+  });
+
+  it("pauses a stuck discovery into human handoff and resumes the loop", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const coordinator = new FakeCoordinator();
+    const result = await runDiscovery({
+      goal: "Read the member name",
+      target: "http://localhost:4478/desk",
+      surface: new FakeSurface(),
+      policy: new PolicyEngine(config),
+      llm: new SequenceClient([
+        { kind: "escalate", reason: "A blocking dialog needs an operator.", reasoning: "The state is ambiguous." },
+        { kind: "note_output", ref: "search", name: "member_name", reasoning: "Mark the member name after the operator unblocked the flow." }
+      ]),
+      logger: new RunLogger("disc_handoff", root),
+      expectedOutputs: ["member_name"],
+      handoff: coordinator
+    });
+
+    expect(result).toMatchObject({ status: "success" });
+    expect(coordinator.requests).toHaveLength(1);
+    expect(coordinator.requests[0]).toMatchObject({ capability: "discovery", reason: "A blocking dialog needs an operator." });
   });
 });
