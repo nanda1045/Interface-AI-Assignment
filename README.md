@@ -84,7 +84,7 @@ npm run cli -- replay manual_lookup_member_savings_balance@1.0.0 \
   --run-root runs
 ```
 
-The declared `--output` names form the discovery completion contract: the runtime stops after the model visibly marks each required output. `--overwrite-artifact` is available only when intentionally replacing an existing version after a successful run.
+The declared `--output` names form the discovery completion contract: the runtime stops after the model visibly marks each required output. `--overwrite-artifact` is available only when intentionally replacing an existing version after a successful run. Adding `--handoff` (headed browser only) lets a stuck discovery pause into the same operator console used for replay handoff instead of ending the run.
 
 ## Manual test checklist
 
