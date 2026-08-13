@@ -3,7 +3,10 @@ const secretPatterns = [
   /\b\d{3}-\d{2}-\d{4}\b/g,
   /\b(?:\d[ -]*?){12,19}\b/g,
   /\b(?:sk|key|token)_[A-Za-z0-9_-]{12,}\b/gi,
-  /Bearer\s+[A-Za-z0-9._~+/-]+=*/gi
+  /Bearer\s+[A-Za-z0-9._~+/-]+=*/gi,
+  // Regulated financial data: no dollar balance persists raw, even when it was
+  // never individually marked sensitive (e.g. adjacent accounts in a digest).
+  /\$\s?\d[\d,]*\.\d{2}\b/g
 ];
 
 export function redactString(value: string, sensitiveValues: readonly string[] = []): string {

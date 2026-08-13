@@ -45,14 +45,37 @@ export class RunLogger {
   }
 
   public async finalizeRedaction(): Promise<void> {
-    for (const filename of ["log.jsonl", "transcript.jsonl", "result.json", "artifact.json"]) {
+    const targets: { filename: string; kind: "jsonl" | "json" }[] = [
+      { filename: "log.jsonl", kind: "jsonl" },
+      { filename: "transcript.jsonl", kind: "jsonl" },
+      { filename: "result.json", kind: "json" },
+      { filename: "artifact.json", kind: "json" }
+    ];
+    for (const { filename, kind } of targets) {
       const destination = path.join(this.directory, filename);
+      let current: string;
       try {
-        const current = await readFile(destination, "utf8");
-        await writeFile(destination, redactString(current, [...this.sensitiveValues]), "utf8");
+        current = await readFile(destination, "utf8");
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
       }
+      const redacted = kind === "jsonl"
+        ? current.split("\n").map((line) => (line.trim() ? this.redactSerialized(line, false) : line)).join("\n")
+        : `${this.redactSerialized(current, true)}\n`;
+      await writeFile(destination, redacted, "utf8");
+    }
+  }
+
+  // Re-serializing through JSON keeps redaction scoped to string values; a raw
+  // text substitution would also corrupt digit substrings inside numbers.
+  private redactSerialized(serialized: string, pretty: boolean): string {
+    const sensitiveValues = [...this.sensitiveValues];
+    try {
+      const parsed = JSON.parse(serialized) as unknown;
+      return JSON.stringify(redactValue(parsed, sensitiveValues), null, pretty ? 2 : undefined);
+    } catch {
+      return redactString(serialized, sensitiveValues);
     }
   }
 
