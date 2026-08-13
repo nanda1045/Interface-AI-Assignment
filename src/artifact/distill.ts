@@ -1,0 +1,102 @@
+import type { DiscoveryResult, RecordedStep } from "../agent/loop.js";
+import type { AbstractAction } from "../surface/types.js";
+import { capabilityArtifactSchema, type CapabilityArtifact, type ObjectContract } from "./schema.js";
+
+export interface DistillOptions {
+  id: string;
+  title: string;
+  description: string;
+  entryUrl: string;
+  model: string;
+  runId: string;
+  params: Record<string, string>;
+  inputs: ObjectContract;
+  outputs: ObjectContract;
+  risk?: "read_only" | "mutating" | "irreversible";
+  recordedAt?: Date;
+}
+
+function bindAction(action: AbstractAction, params: Record<string, string>, used: Set<string>): CapabilityArtifact["steps"][number]["action"] {
+  if (action.kind === "type" || action.kind === "select") {
+    const value = action.kind === "type" ? action.text : action.value;
+    const matches = Object.entries(params).filter(([, candidate]) => candidate === value);
+    if (matches.length !== 1) throw new Error(`Could not uniquely bind recorded ${action.kind} value to a supplied parameter.`);
+    const param = matches[0]?.[0];
+    if (!param) throw new Error(`Could not bind recorded ${action.kind} value.`);
+    used.add(param);
+    return action.kind === "type"
+      ? { kind: "type", value_from: { param }, ...(action.sensitive ? { sensitive: true } : {}) }
+      : { kind: "select", value_from: { param } };
+  }
+  if (action.kind === "navigate") return { kind: "navigate", url: action.url };
+  if (action.kind === "press") return { kind: "press", key: action.key };
+  if (action.kind === "scroll") return { kind: "scroll", direction: action.direction };
+  return { kind: action.kind };
+}
+
+function distillStep(recorded: RecordedStep, index: number, params: Record<string, string>, used: Set<string>): CapabilityArtifact["steps"][number] {
+  const action = bindAction(recorded.action, params, used);
+  const target = recorded.locators ? { frame: recorded.locators.strategies[0]?.frame, strategies: recorded.locators.strategies } : undefined;
+  const targetName = recorded.locators?.strategies.find((strategy) => strategy.kind === "role_name");
+  const intent = recorded.reasoning || `${recorded.action.kind} ${targetName && "name" in targetName ? targetName.name : "the target control"}`;
+  const postconditions: CapabilityArtifact["steps"][number]["postconditions"] = [];
+  if (action.kind === "type" || action.kind === "select") postconditions.push({ kind: "value_equals_param", param: action.value_from.param });
+  if (recorded.afterUrl !== recorded.beforeUrl) postconditions.push({ kind: "url_matches", pattern: `^${recorded.afterUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` });
+  return {
+    id: `s${index + 1}`,
+    intent,
+    action,
+    ...(target ? { target } : {}),
+    wait: { readyWhen: target ? "target_resolvable" : "page_loaded", timeout_ms: 10_000 },
+    postconditions
+  };
+}
+
+export function distillDiscovery(result: DiscoveryResult, options: DistillOptions): CapabilityArtifact {
+  if (result.status !== "success") throw new Error(`Cannot distill a ${result.status} discovery run.`);
+  if (result.steps.length === 0) throw new Error("Cannot distill a discovery run with no recorded actions.");
+  const used = new Set<string>();
+  const steps = result.steps.map((step, index) => distillStep(step, index, options.params, used));
+  const unbound = Object.keys(options.params).filter((param) => !used.has(param));
+  if (unbound.length > 0) throw new Error(`Supplied parameters were never bound: ${unbound.join(", ")}`);
+  const outputEntries = Object.entries(result.outputs);
+  if (outputEntries.length === 0) throw new Error("Discovery finished without any note_output calls.");
+  const extract = outputEntries.map(([output, bundle]) => ({
+    output,
+    from: { frame: bundle.strategies[0]?.frame, strategies: bundle.strategies },
+    parse: options.outputs.properties[output]?.["x-format"] === "usd-currency" ? "currency" as const : "text" as const
+  }));
+  const undeclared = extract.map((item) => item.output).filter((output) => !(output in options.outputs.properties));
+  if (undeclared.length > 0) throw new Error(`Marked outputs are not declared in the output contract: ${undeclared.join(", ")}`);
+  const origin = new URL(options.entryUrl).origin;
+  return capabilityArtifactSchema.parse({
+    schema_version: "1.0",
+    capability: {
+      id: options.id,
+      version: "1.0.0",
+      title: options.title,
+      description: options.description,
+      app: { id: "corepoint-teller", vendor: "CorePoint Systems", ui_version_range: ">=3.1 <4" },
+      risk: options.risk ?? "read_only",
+      status: "draft",
+      provenance: { discovered_by: options.model, discovery_run: options.runId, recorded_at: (options.recordedAt ?? new Date()).toISOString(), approved_by: null, approved_at: null }
+    },
+    inputs: options.inputs,
+    outputs: options.outputs,
+    entry: { url: options.entryUrl, preconditions: [{ kind: "authenticated", via: "mock-auth or an existing teller session" }] },
+    steps,
+    checkpoint: { assert: extract.map((item) => ({ kind: "element_present" as const, target: item.from })) },
+    extract,
+    outcomes: [
+      { code: "MEMBER_NOT_FOUND", at_steps: steps.map((step) => step.id), when: [{ kind: "text_visible", pattern: "No member found", frame: "workarea" }], returns: { found: false } },
+      { code: "PERMISSION_DENIED", at_steps: steps.map((step) => step.id), when: [{ kind: "text_visible", pattern: "Access denied", frame: "workarea" }] }
+    ],
+    recovery: [{
+      id: "dismiss_session_modal",
+      condition: { kind: "dialog_present", textPattern: "Session expiring" },
+      action: { kind: "click", target: { strategies: [{ kind: "role_name", role: "button", name: "Continue", frame: "workarea", unique: true, confidence: 0.9 }] } },
+      max_attempts: 1
+    }],
+    policy: { allowed_origins: [origin], allowed_actions: ["navigate", "click", "focus", "type", "select", "press", "scroll"], max_duration_ms: 120_000 }
+  });
+}

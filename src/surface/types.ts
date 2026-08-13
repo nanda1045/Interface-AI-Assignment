@@ -31,7 +31,7 @@ export interface Observation {
 
 interface LocatorStrategyBase {
   frame: string;
-  unique: boolean;
+  unique: true;
   confidence: number;
 }
 
