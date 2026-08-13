@@ -1,0 +1,18 @@
+allowed_origins:
+  - http://localhost:4478
+  - http://localhost:4479
+allowed_path_patterns:
+  - "^/(login|desk|operations|workspace)(/.*)?$"
+allowed_actions:
+  - navigate
+  - click
+  - focus
+  - type
+  - select
+  - press
+  - scroll
+max_steps: 25
+max_duration_ms: 120000
+risk:
+  discovery_mutations: block
+  irreversible: escalate
