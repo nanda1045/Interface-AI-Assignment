@@ -32,6 +32,7 @@ describe("artifact governance and tenant overlays", () => {
       step_targets: { s1: { frame: "workarea", strategies: [{ kind: "attr_css", value: "input[name='f_ahid']", frame: "workarea", unique: true, confidence: 0.7 }] } }
     });
     expect(overlaid.entry.url).toBe("http://localhost:4479/operations");
+    expect(overlaid.policy.allowed_origins).toEqual(["http://localhost:4479"]);
     expect(overlaid.steps[0]?.target?.strategies[0]).toMatchObject({ kind: "attr_css", value: "input[name='f_ahid']" });
     expect(overlaid.capability.id).toBe("lookup_balance");
   });

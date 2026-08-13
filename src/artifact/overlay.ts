@@ -18,7 +18,8 @@ export function applyOverlay(base: CapabilityArtifact, rawOverlay: TenantOverlay
   if (overlay.capability !== base.capability.id) throw new Error(`Overlay ${overlay.tenant} targets ${overlay.capability}, not ${base.capability.id}.`);
   const steps = base.steps.map((step) => overlay.step_targets?.[step.id] ? { ...step, target: overlay.step_targets[step.id] } : step);
   const extract = base.extract.map((item) => overlay.extract_targets?.[item.output] ? { ...item, from: overlay.extract_targets[item.output] } : item);
-  return capabilityArtifactSchema.parse({ ...base, entry: { ...base.entry, ...(overlay.entry_url ? { url: overlay.entry_url } : {}) }, steps, extract });
+  const policy = overlay.entry_url ? { ...base.policy, allowed_origins: [new URL(overlay.entry_url).origin] } : base.policy;
+  return capabilityArtifactSchema.parse({ ...base, entry: { ...base.entry, ...(overlay.entry_url ? { url: overlay.entry_url } : {}) }, steps, extract, policy });
 }
 
 export async function loadOverlay(path: string): Promise<TenantOverlay> {

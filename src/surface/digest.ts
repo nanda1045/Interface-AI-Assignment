@@ -38,6 +38,10 @@ export function getFramePath(frame: Frame): string {
 
 export async function digestFrame(frame: Frame, observationId: string): Promise<DigestElement[]> {
   const framePath = getFramePath(frame);
+  // tsx/esbuild may preserve callback names with this helper. Browser-evaluated
+  // callbacks are serialized without the module prelude, so provide the tiny
+  // identity helper inside each frame before evaluating the digest function.
+  await frame.evaluate("globalThis.__name ||= ((target) => target)");
   const raw = await frame.locator(digestSelector).evaluateAll((nodes, prefix) => {
     const clean = (value: string | null | undefined): string => (value ?? "").replace(/\s+/g, " ").trim();
     const implicitRole = (element: Element): string => {

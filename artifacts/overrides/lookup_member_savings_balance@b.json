@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "capability": "lookup_member_savings_balance",
+  "tenant": "b",
+  "entry_url": "http://localhost:4479/operations",
+  "step_targets": {
+    "s1": {
+      "frame": "workarea",
+      "strategies": [
+        { "kind": "label_proximity", "label": "Acct Holder ID", "control": "input", "frame": "workarea", "unique": true, "confidence": 0.85 },
+        { "kind": "attr_css", "value": "input[name='f_ahid']", "frame": "workarea", "unique": true, "confidence": 0.7 }
+      ]
+    }
+  }
+}

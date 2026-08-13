@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "capability": {
+    "id": "lookup_member_savings_balance",
+    "version": "1.0.0",
+    "title": "Look up member savings balance",
+    "description": "Searches for a member by ID and returns their name and regular savings balance.",
+    "app": { "id": "corepoint-teller", "vendor": "CorePoint Systems", "ui_version_range": ">=3.1 <4" },
+    "risk": "read_only",
+    "status": "draft",
+    "provenance": {
+      "discovered_by": "pending-live-discovery",
+      "discovery_run": "evidence/discovery-pending",
+      "recorded_at": "2026-08-13T17:00:00.000Z",
+      "approved_by": null,
+      "approved_at": null
+    }
+  },
+  "inputs": {
+    "type": "object",
+    "required": ["member_id"],
+    "properties": { "member_id": { "type": "string", "description": "Fictional 4-digit member identifier.", "pattern": "^[0-9]{4}$", "sensitive": true } }
+  },
+  "outputs": {
+    "type": "object",
+    "required": ["member_name", "savings_balance"],
+    "properties": {
+      "member_name": { "type": "string", "sensitive": true },
+      "savings_balance": { "type": "string", "x-format": "usd-currency", "sensitive": true }
+    }
+  },
+  "entry": { "url": "http://localhost:4478/desk", "preconditions": [{ "kind": "authenticated", "via": "--mock-auth or an existing teller session" }] },
+  "steps": [
+    {
+      "id": "s1",
+      "intent": "Enter the member ID in the search field",
+      "action": { "kind": "type", "value_from": { "param": "member_id" }, "sensitive": true },
+      "target": { "frame": "workarea", "strategies": [
+        { "kind": "label_proximity", "label": "Member No.", "control": "input", "frame": "workarea", "unique": true, "confidence": 0.85 },
+        { "kind": "attr_css", "value": "input[name='f_mno']", "frame": "workarea", "unique": true, "confidence": 0.7 },
+        { "kind": "geometry", "bboxPct": [0.31, 0.22, 0.14, 0.04], "nearText": "Member No.", "frame": "workarea", "unique": true, "confidence": 0.35 }
+      ] },
+      "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 },
+      "postconditions": [{ "kind": "value_equals_param", "param": "member_id" }]
+    },
+    {
+      "id": "s2",
+      "intent": "Run the read-only member search",
+      "action": { "kind": "click" },
+      "target": { "frame": "workarea", "strategies": [
+        { "kind": "role_name", "role": "button", "name": "Search", "frame": "workarea", "unique": true, "confidence": 0.9 },
+        { "kind": "text", "value": "Search", "control": "button", "frame": "workarea", "unique": true, "confidence": 0.8 }
+      ] },
+      "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 },
+      "postconditions": []
+    },
+    {
+      "id": "s3",
+      "intent": "Open the matching member profile",
+      "action": { "kind": "click" },
+      "target": { "frame": "workarea", "strategies": [
+        { "kind": "role_name", "role": "link", "name": "Open Member", "frame": "workarea", "unique": true, "confidence": 0.9 },
+        { "kind": "text", "value": "Open Member", "control": "a", "frame": "workarea", "unique": true, "confidence": 0.8 }
+      ] },
+      "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 },
+      "postconditions": [{ "kind": "text_visible", "pattern": "Member Profile", "frame": "workarea" }]
+    }
+  ],
+  "checkpoint": { "assert": [
+    { "kind": "text_visible", "pattern": "Member Profile", "frame": "workarea" },
+    { "kind": "element_present", "target": { "frame": "workarea", "strategies": [{ "kind": "label_adjacent_cell", "label": "Regular Savings", "frame": "workarea", "unique": true, "confidence": 0.85 }] } }
+  ] },
+  "extract": [
+    { "output": "member_name", "from": { "frame": "workarea", "strategies": [{ "kind": "label_adjacent_cell", "label": "Member Name", "frame": "workarea", "unique": true, "confidence": 0.85 }] }, "parse": "text" },
+    { "output": "savings_balance", "from": { "frame": "workarea", "strategies": [{ "kind": "label_adjacent_cell", "label": "Regular Savings", "frame": "workarea", "unique": true, "confidence": 0.85 }] }, "parse": "currency" }
+  ],
+  "outcomes": [
+    { "code": "MEMBER_NOT_FOUND", "at_steps": ["s2", "s3"], "when": [{ "kind": "text_visible", "pattern": "No member found", "frame": "workarea" }], "returns": { "found": false } },
+    { "code": "PERMISSION_DENIED", "at_steps": ["s2", "s3"], "when": [{ "kind": "text_visible", "pattern": "Access denied", "frame": "workarea" }] }
+  ],
+  "recovery": [{
+    "id": "dismiss_session_modal",
+    "condition": { "kind": "dialog_present", "textPattern": "Session expiring" },
+    "action": { "kind": "click", "target": { "frame": "workarea", "strategies": [{ "kind": "role_name", "role": "button", "name": "Continue", "frame": "workarea", "unique": true, "confidence": 0.9 }] } },
+    "max_attempts": 1
+  }],
+  "policy": { "allowed_origins": ["http://localhost:4478"], "allowed_actions": ["navigate", "click", "focus", "type", "select", "press", "scroll"], "max_duration_ms": 120000 }
+}

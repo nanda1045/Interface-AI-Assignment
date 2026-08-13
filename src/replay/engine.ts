@@ -94,16 +94,15 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   let lastAttempts: unknown;
   let sensitiveRun = false;
   await logger.initialize();
-  await logger.event({ type: "run_started", goal: artifact.capability.title, target: artifact.entry.url, model: "deterministic-replay" });
-
-  const invalidInput = validateInputs(artifact, params);
-  if (invalidInput) return fail("invalid_input", "Parameters satisfying the artifact input contract.", invalidInput);
   for (const [name, schema] of Object.entries(artifact.inputs.properties)) {
     if (schema.sensitive && params[name] !== undefined) {
       sensitiveRun = true;
       logger.markSensitive(String(params[name]));
     }
   }
+  await logger.event({ type: "run_started", goal: artifact.capability.title, target: artifact.entry.url, model: "deterministic-replay" });
+  const invalidInput = validateInputs(artifact, params);
+  if (invalidInput) return fail("invalid_input", "Parameters satisfying the artifact input contract.", invalidInput);
   if (artifact.capability.risk === "mutating" && artifact.capability.status !== "approved" && !options.confirmMutations) {
     return fail("policy_blocked", "An approved artifact or interactive mutation confirmation.", "Artifact is draft and no confirmation was supplied.");
   }
@@ -207,6 +206,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     recordTier(stats, `extract:${extraction.output}`, resolution);
     const raw = (await surface.read(resolution.ref)).text;
     outputs[extraction.output] = extraction.parse === "number" ? Number(raw.replace(/[^0-9.-]/g, "")) : raw;
+    if (artifact.outputs.properties[extraction.output]?.sensitive) logger.markSensitive(String(outputs[extraction.output]));
   }
   const result: ReplayResult = { status: "success", outputs, evidence: logger.directory, stability: stats, ...interventionPart() };
   await logger.event({ type: "result", status: "success", detail: result });

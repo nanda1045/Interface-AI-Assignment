@@ -41,7 +41,7 @@ function artifact(): CapabilityArtifact {
     schema_version: "1.0",
     capability: { id: "lookup_member_savings_balance", version: "1.0.0", title: "Look up member savings balance", description: "Searches for a member and reads regular savings.", app: { id: "corepoint-teller", vendor: "CorePoint Systems", ui_version_range: ">=3.1 <4" }, risk: "read_only", status: "draft", provenance: { discovered_by: "test", discovery_run: "disc_test", recorded_at: "2026-08-13T00:00:00.000Z", approved_by: null, approved_at: null } },
     inputs: { type: "object", required: ["member_id"], properties: { member_id: { type: "string", pattern: "^[0-9]{4}$", sensitive: true } } },
-    outputs: { type: "object", required: ["savings_balance"], properties: { savings_balance: { type: "string", "x-format": "usd-currency" } } },
+    outputs: { type: "object", required: ["savings_balance"], properties: { savings_balance: { type: "string", "x-format": "usd-currency", sensitive: true } } },
     entry: { url: `${origin}/desk`, preconditions: [{ kind: "authenticated", via: "test session" }] },
     steps: [
       { id: "s1", intent: "Enter the member ID", action: { kind: "type", value_from: { param: "member_id" }, sensitive: true }, target: field, wait: { readyWhen: "target_resolvable", timeout_ms: 2_000 }, postconditions: [{ kind: "value_equals_param", param: "member_id" }] },
@@ -84,6 +84,9 @@ describe("deterministic replay against the hostile live app", () => {
   it("returns success with output for a different invocation value", async () => {
     const result = await execute("8832");
     expect(result).toMatchObject({ status: "success", outputs: { savings_balance: "$3,109.08" } });
+    const log = await readFile(path.join(temporaryRoot, "replay_8832_normal", "log.jsonl"), "utf8");
+    expect(log).not.toContain("8832");
+    expect(log).not.toContain("$3,109.08");
   });
 
   it("returns not-found as a business outcome rather than a failure", async () => {

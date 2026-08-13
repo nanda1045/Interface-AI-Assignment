@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "capability": {
+    "id": "open_sub_account",
+    "version": "1.0.0",
+    "title": "Open a new member sub-account",
+    "description": "Searches for a member, reviews a new savings sub-account, and creates it after approval.",
+    "app": { "id": "corepoint-teller", "vendor": "CorePoint Systems", "ui_version_range": ">=3.1 <4" },
+    "risk": "mutating",
+    "status": "approved",
+    "provenance": {
+      "discovered_by": "reviewed-fixture",
+      "discovery_run": "tests/control/handoff.integration.test.ts",
+      "recorded_at": "2026-08-13T17:00:00.000Z",
+      "approved_by": "assessment-author",
+      "approved_at": "2026-08-13T17:05:00.000Z"
+    }
+  },
+  "inputs": {
+    "type": "object",
+    "required": ["member_id", "account_type", "opening_deposit"],
+    "properties": {
+      "member_id": { "type": "string", "pattern": "^[0-9]{4}$", "sensitive": true },
+      "account_type": { "type": "string" },
+      "opening_deposit": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{2})?$" }
+    }
+  },
+  "outputs": { "type": "object", "required": ["account_number"], "properties": { "account_number": { "type": "string", "sensitive": true } } },
+  "entry": { "url": "http://localhost:4478/desk", "preconditions": [{ "kind": "authenticated", "via": "--mock-auth or an existing teller session" }] },
+  "steps": [
+    { "id": "s1", "intent": "Enter the member ID", "action": { "kind": "type", "value_from": { "param": "member_id" }, "sensitive": true }, "target": { "frame": "workarea", "strategies": [{ "kind": "label_proximity", "label": "Member No.", "control": "input", "frame": "workarea", "unique": true, "confidence": 0.85 }, { "kind": "attr_css", "value": "input[name='f_mno']", "frame": "workarea", "unique": true, "confidence": 0.7 }] }, "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 }, "postconditions": [{ "kind": "value_equals_param", "param": "member_id" }] },
+    { "id": "s2", "intent": "Search for the member", "action": { "kind": "click" }, "target": { "frame": "workarea", "strategies": [{ "kind": "role_name", "role": "button", "name": "Search", "frame": "workarea", "unique": true, "confidence": 0.9 }] }, "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 }, "postconditions": [{ "kind": "text_visible", "pattern": "Member Search Results", "frame": "workarea" }] },
+    { "id": "s3", "intent": "Open the member profile", "action": { "kind": "click" }, "target": { "frame": "workarea", "strategies": [{ "kind": "role_name", "role": "link", "name": "Open Member", "frame": "workarea", "unique": true, "confidence": 0.9 }] }, "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 }, "postconditions": [{ "kind": "text_visible", "pattern": "Member Profile", "frame": "workarea" }] },
+    { "id": "s4", "intent": "Open the new sub-account form", "action": { "kind": "click" }, "target": { "frame": "workarea", "strategies": [{ "kind": "role_name", "role": "link", "name": "Open New Sub-Account", "frame": "workarea", "unique": true, "confidence": 0.9 }] }, "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 }, "postconditions": [{ "kind": "text_visible", "pattern": "Open New Sub-Account", "frame": "workarea" }] },
+    { "id": "s5", "intent": "Choose the sub-account product", "action": { "kind": "select", "value_from": { "param": "account_type" } }, "target": { "frame": "workarea", "strategies": [{ "kind": "label_proximity", "label": "Sub-Account Type", "control": "select", "frame": "workarea", "unique": true, "confidence": 0.85 }] }, "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 }, "postconditions": [{ "kind": "value_equals_param", "param": "account_type" }] },
+    { "id": "s6", "intent": "Enter the opening deposit", "action": { "kind": "type", "value_from": { "param": "opening_deposit" } }, "target": { "frame": "workarea", "strategies": [{ "kind": "label_proximity", "label": "Opening Deposit", "control": "input", "frame": "workarea", "unique": true, "confidence": 0.85 }] }, "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 }, "postconditions": [{ "kind": "value_equals_param", "param": "opening_deposit" }] },
+    { "id": "s7", "intent": "Review the new account", "action": { "kind": "click" }, "target": { "frame": "workarea", "strategies": [{ "kind": "role_name", "role": "button", "name": "Review", "frame": "workarea", "unique": true, "confidence": 0.9 }] }, "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 }, "postconditions": [{ "kind": "text_visible", "pattern": "Review New Sub-Account", "frame": "workarea" }] },
+    { "id": "s8", "intent": "Confirm and open the account", "action": { "kind": "click" }, "target": { "frame": "workarea", "strategies": [{ "kind": "role_name", "role": "button", "name": "Confirm & Open Account", "frame": "workarea", "unique": true, "confidence": 0.9 }] }, "wait": { "readyWhen": "target_resolvable", "timeout_ms": 10000 }, "postconditions": [{ "kind": "text_visible", "pattern": "Sub-Account Opened", "frame": "workarea" }] }
+  ],
+  "checkpoint": { "assert": [{ "kind": "text_visible", "pattern": "Sub-Account Opened", "frame": "workarea" }, { "kind": "element_present", "target": { "frame": "workarea", "strategies": [{ "kind": "label_adjacent_cell", "label": "New Account No.", "frame": "workarea", "unique": true, "confidence": 0.85 }] } }] },
+  "extract": [{ "output": "account_number", "from": { "frame": "workarea", "strategies": [{ "kind": "label_adjacent_cell", "label": "New Account No.", "frame": "workarea", "unique": true, "confidence": 0.85 }] }, "parse": "text" }],
+  "outcomes": [
+    { "code": "MEMBER_NOT_FOUND", "at_steps": ["s2", "s3"], "when": [{ "kind": "text_visible", "pattern": "No member found", "frame": "workarea" }], "returns": { "found": false } },
+    { "code": "PERMISSION_DENIED", "at_steps": ["s2", "s3"], "when": [{ "kind": "text_visible", "pattern": "Access denied", "frame": "workarea" }] }
+  ],
+  "recovery": [{ "id": "dismiss_session_modal", "condition": { "kind": "dialog_present", "textPattern": "Session expiring" }, "action": { "kind": "click", "target": { "frame": "workarea", "strategies": [{ "kind": "role_name", "role": "button", "name": "Continue", "frame": "workarea", "unique": true, "confidence": 0.9 }] } }, "max_attempts": 1 }],
+  "policy": { "allowed_origins": ["http://localhost:4478"], "allowed_actions": ["navigate", "click", "focus", "type", "select", "press", "scroll"], "max_duration_ms": 120000 }
+}

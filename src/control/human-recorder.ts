@@ -27,6 +27,7 @@ export async function installHumanRecorder(page: Page, controller: RunController
     if (controller.lease.current().phase !== "human_control") return;
     await logger.event({ type: "human_action", action: { ...event, ...(event.value === REDACTED ? { value: REDACTED } : {}) } });
   });
+  await page.addInitScript({ content: "globalThis.__name ||= ((target) => target)" });
   await page.addInitScript(installListeners);
   for (const frame of page.frames()) await frame.evaluate(installListeners).catch(() => undefined);
   page.on("framenavigated", async (frame) => {

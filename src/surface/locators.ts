@@ -56,6 +56,7 @@ async function geometryIsUnique(frame: Frame, element: DigestElement): Promise<b
 }
 
 export async function locatorForNearbyLabel(frame: Frame, label: string, control: string): Promise<Locator> {
+  await frame.evaluate("globalThis.__name ||= ((target) => target)");
   const candidates = frame.locator(control);
   const matches = await candidates.evaluateAll((elements, expected) => {
     const clean = (value: string | null | undefined): string => (value ?? "").replace(/\s+/g, " ").trim();

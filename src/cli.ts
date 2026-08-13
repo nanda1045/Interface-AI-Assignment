@@ -107,7 +107,9 @@ program.command("replay")
   .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
   .option("--handoff", "enable same-session human intervention", false)
   .option("--console-port <port>", "operator console port", "4590")
-  .action(async (reference: string, raw: { param: string[]; policy: string; artifactRoot: string; overlay?: string; chaos?: string; headless: boolean; confirmMutations: boolean; mockAuth: boolean; handoff: boolean; consolePort: string }) => {
+  .option("--run-root <path>", "run evidence directory", "runs")
+  .option("--run-id <id>", "explicit run id (useful for reproducible evidence)")
+  .action(async (reference: string, raw: { param: string[]; policy: string; artifactRoot: string; overlay?: string; chaos?: string; headless: boolean; confirmMutations: boolean; mockAuth: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
     const store = new ArtifactStore(raw.artifactRoot);
     let artifact = await store.load(reference);
     if (raw.overlay) artifact = applyOverlay(artifact, await loadOverlay(raw.overlay));
@@ -121,7 +123,7 @@ program.command("replay")
     if (raw.chaos) await context.addCookies([{ name: "cp_chaos", value: raw.chaos, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
     if (raw.handoff && raw.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
     const page = await context.newPage();
-    const logger = new RunLogger(createRunId("replay"));
+    const logger = new RunLogger(raw.runId ?? createRunId("replay"), raw.runRoot);
     await logger.initialize();
     const controller = raw.handoff ? new RunController(logger) : undefined;
     const surface = new WebSurface(page, { browser, context, ...(controller ? { canAgentAct: () => controller.lease.agentCanAct() } : {}) });

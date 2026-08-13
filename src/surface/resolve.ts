@@ -55,6 +55,7 @@ export async function resolveTarget(page: Page, target: TargetSpec, refFactory: 
       attempts.push({ strategy, matched: 0, reason: "frame_not_found" });
       continue;
     }
+    await frame.evaluate("globalThis.__name ||= ((target) => target)");
     const candidate = await strategyLocator(frame, strategy);
     if (candidate.tooFar) {
       attempts.push({ strategy, matched: 0, reason: "geometry_too_far" });
