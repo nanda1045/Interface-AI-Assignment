@@ -1,32 +1,32 @@
-{"type":"run_started","goal":"Open a new sub-account","target":"http://127.0.0.1:57029/desk","model":"deterministic-replay","at":"2026-08-13T18:41:23.914Z","runId":"replay_handoff"}
-{"type":"policy_check","step":0,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:41:23.916Z","runId":"replay_handoff"}
-{"type":"action","step":0,"action":{"kind":"navigate","url":"http://127.0.0.1:57029/desk"},"resultUrl":"http://127.0.0.1:57029/desk","at":"2026-08-13T18:41:23.946Z","runId":"replay_handoff"}
-{"type":"policy_check","step":1,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:41:24.042Z","runId":"replay_handoff"}
-{"type":"action","step":1,"action":{"kind":"type","ref":"r1","text":"«redacted»","sensitive":true},"resultUrl":"http://127.0.0.1:57029/desk","at":"2026-08-13T18:41:24.088Z","runId":"replay_handoff"}
-{"type":"policy_check","step":2,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:41:24.122Z","runId":"replay_handoff"}
-{"type":"action","step":2,"action":{"kind":"click","ref":"r3"},"resultUrl":"http://127.0.0.1:57029/desk","at":"2026-08-13T18:41:24.159Z","runId":"replay_handoff"}
-{"type":"policy_check","step":3,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:41:24.213Z","runId":"replay_handoff"}
-{"type":"action","step":3,"action":{"kind":"click","ref":"r4"},"resultUrl":"http://127.0.0.1:57029/desk","at":"2026-08-13T18:41:24.235Z","runId":"replay_handoff"}
-{"type":"policy_check","step":4,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:41:24.260Z","runId":"replay_handoff"}
-{"type":"action","step":4,"action":{"kind":"click","ref":"r5"},"resultUrl":"http://127.0.0.1:57029/desk","at":"2026-08-13T18:41:24.284Z","runId":"replay_handoff"}
-{"type":"policy_check","step":5,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:41:24.310Z","runId":"replay_handoff"}
-{"type":"action","step":5,"action":{"kind":"select","ref":"r6","value":"Holiday Savings"},"resultUrl":"http://127.0.0.1:57029/desk","at":"2026-08-13T18:41:24.313Z","runId":"replay_handoff"}
-{"type":"policy_check","step":6,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:41:24.333Z","runId":"replay_handoff"}
-{"type":"action","step":6,"action":{"kind":"type","ref":"r8","text":"25.00"},"resultUrl":"http://127.0.0.1:57029/desk","at":"2026-08-13T18:41:24.336Z","runId":"replay_handoff"}
-{"type":"policy_check","step":7,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:41:24.353Z","runId":"replay_handoff"}
-{"type":"action","step":7,"action":{"kind":"click","ref":"r10"},"resultUrl":"http://127.0.0.1:57029/desk","at":"2026-08-13T18:41:24.376Z","runId":"replay_handoff"}
-{"type":"policy_check","step":8,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:41:24.409Z","runId":"replay_handoff"}
-{"type":"action","step":8,"action":{"kind":"click","ref":"r11"},"resultUrl":"http://127.0.0.1:57029/desk","at":"2026-08-13T18:41:24.436Z","runId":"replay_handoff"}
-{"type":"intervention_requested","request":{"runId":"replay_handoff","capability":"open_sub_account@1.0.0","goal":"Open a new sub-account","step":"s8","intent":"Confirm and open the account","reason":"Supervisor override required","requestedAction":"Enter an authorized supervisor code and submit the confirmation form.","recentEvents":[{"url":"http://127.0.0.1:57029/desk","title":"Lakeview Community Credit Union — CorePoint","stateHash":"8cbc8a7716bbca2c0b30"}],"id":"replay_handoff_int_1","status":"waiting","requestedAt":"2026-08-13T18:41:24.452Z"},"at":"2026-08-13T18:41:24.452Z","runId":"replay_handoff"}
-{"type":"lease_change","state":{"phase":"human_control","holder":"human","operator":"supervisor@example.test","since":"2026-08-13T18:41:24.453Z"},"at":"2026-08-13T18:41:24.453Z","runId":"replay_handoff"}
-{"type":"lease_change","state":{"phase":"human_control","holder":"human","operator":"supervisor@example.test","since":"2026-08-13T18:41:24.453Z"},"at":"2026-08-13T18:41:24.454Z","runId":"replay_handoff"}
-{"type":"human_action","action":{"kind":"key","control":"override_code","value":"«redacted»"},"at":"2026-08-13T18:41:24.484Z","runId":"replay_handoff"}
-{"type":"human_action","action":{"kind":"key","control":"override_code","value":"«redacted»"},"at":"2026-08-13T18:41:24.487Z","runId":"replay_handoff"}
-{"type":"human_action","action":{"kind":"key","control":"override_code","value":"«redacted»"},"at":"2026-08-13T18:41:24.488Z","runId":"replay_handoff"}
-{"type":"human_action","action":{"kind":"key","control":"override_code","value":"«redacted»"},"at":"2026-08-13T18:41:24.490Z","runId":"replay_handoff"}
-{"type":"human_action","action":{"kind":"input","control":"override_code","value":"«redacted»"},"at":"2026-08-13T18:41:24.512Z","runId":"replay_handoff"}
-{"type":"human_action","action":{"kind":"click","control":"Confirm & Open Account"},"at":"2026-08-13T18:41:24.513Z","runId":"replay_handoff"}
-{"type":"human_action","action":{"kind":"navigation","url":"http://127.0.0.1:57029/workspace/member/«redacted»/subaccount/submit"},"at":"2026-08-13T18:41:24.530Z","runId":"replay_handoff"}
-{"type":"lease_change","state":{"phase":"resuming","holder":null},"at":"2026-08-13T18:41:24.557Z","runId":"replay_handoff"}
-{"type":"lease_change","state":{"phase":"agent_running","holder":"agent"},"at":"2026-08-13T18:41:24.573Z","runId":"replay_handoff"}
-{"type":"result","status":"success","detail":{"status":"success","outputs":{"account_number":"«redacted»"},"evidence":"/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/evidence/replay_handoff","stability":{"resolutions":9,"matched_tiers":{"1":9},"rescued_steps":[]},"intervention":{"count":1,"requestIds":["replay_handoff_int_1"]}},"at":"2026-08-13T18:41:24.591Z","runId":"replay_handoff"}
+{"type":"run_started","goal":"Open a new sub-account","target":"http://127.0.0.1:57909/desk","model":"deterministic-replay","at":"2026-08-13T19:32:54.158Z","runId":"replay_handoff"}
+{"type":"policy_check","step":0,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T19:32:54.159Z","runId":"replay_handoff"}
+{"type":"action","step":0,"action":{"kind":"navigate","url":"http://127.0.0.1:57909/desk"},"resultUrl":"http://127.0.0.1:57909/desk","at":"2026-08-13T19:32:54.176Z","runId":"replay_handoff"}
+{"type":"policy_check","step":1,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T19:32:54.226Z","runId":"replay_handoff"}
+{"type":"action","step":1,"action":{"kind":"type","ref":"r1","text":"«redacted»","sensitive":true},"resultUrl":"http://127.0.0.1:57909/desk","at":"2026-08-13T19:32:54.244Z","runId":"replay_handoff"}
+{"type":"policy_check","step":2,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T19:32:54.267Z","runId":"replay_handoff"}
+{"type":"action","step":2,"action":{"kind":"click","ref":"r3"},"resultUrl":"http://127.0.0.1:57909/desk","at":"2026-08-13T19:32:54.306Z","runId":"replay_handoff"}
+{"type":"policy_check","step":3,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T19:32:54.355Z","runId":"replay_handoff"}
+{"type":"action","step":3,"action":{"kind":"click","ref":"r4"},"resultUrl":"http://127.0.0.1:57909/desk","at":"2026-08-13T19:32:54.381Z","runId":"replay_handoff"}
+{"type":"policy_check","step":4,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T19:32:54.405Z","runId":"replay_handoff"}
+{"type":"action","step":4,"action":{"kind":"click","ref":"r5"},"resultUrl":"http://127.0.0.1:57909/desk","at":"2026-08-13T19:32:54.430Z","runId":"replay_handoff"}
+{"type":"policy_check","step":5,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T19:32:54.451Z","runId":"replay_handoff"}
+{"type":"action","step":5,"action":{"kind":"select","ref":"r6","value":"Holiday Savings"},"resultUrl":"http://127.0.0.1:57909/desk","at":"2026-08-13T19:32:54.454Z","runId":"replay_handoff"}
+{"type":"policy_check","step":6,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T19:32:54.472Z","runId":"replay_handoff"}
+{"type":"action","step":6,"action":{"kind":"type","ref":"r8","text":"25.00"},"resultUrl":"http://127.0.0.1:57909/desk","at":"2026-08-13T19:32:54.475Z","runId":"replay_handoff"}
+{"type":"policy_check","step":7,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T19:32:54.490Z","runId":"replay_handoff"}
+{"type":"action","step":7,"action":{"kind":"click","ref":"r10"},"resultUrl":"http://127.0.0.1:57909/desk","at":"2026-08-13T19:32:54.512Z","runId":"replay_handoff"}
+{"type":"policy_check","step":8,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T19:32:54.531Z","runId":"replay_handoff"}
+{"type":"action","step":8,"action":{"kind":"click","ref":"r11"},"resultUrl":"http://127.0.0.1:57909/desk","at":"2026-08-13T19:32:54.559Z","runId":"replay_handoff"}
+{"type":"intervention_requested","request":{"runId":"replay_handoff","capability":"open_sub_account@1.0.0","goal":"Open a new sub-account","step":"s8","intent":"Confirm and open the account","reason":"Supervisor override required","requestedAction":"Enter an authorized supervisor code and submit the confirmation form.","recentEvents":[{"url":"http://127.0.0.1:57909/desk","title":"Lakeview Community Credit Union — CorePoint","stateHash":"a9e5759b3389b62bc795"}],"id":"replay_handoff_int_1","status":"waiting","requestedAt":"2026-08-13T19:32:54.567Z"},"at":"2026-08-13T19:32:54.568Z","runId":"replay_handoff"}
+{"type":"lease_change","state":{"phase":"human_control","holder":"human","operator":"supervisor@example.test","since":"2026-08-13T19:32:54.568Z"},"at":"2026-08-13T19:32:54.568Z","runId":"replay_handoff"}
+{"type":"lease_change","state":{"phase":"human_control","holder":"human","operator":"supervisor@example.test","since":"2026-08-13T19:32:54.568Z"},"at":"2026-08-13T19:32:54.568Z","runId":"replay_handoff"}
+{"type":"human_action","action":{"kind":"key","control":"override_code","value":"«redacted»"},"at":"2026-08-13T19:32:54.579Z","runId":"replay_handoff"}
+{"type":"human_action","action":{"kind":"key","control":"override_code","value":"«redacted»"},"at":"2026-08-13T19:32:54.580Z","runId":"replay_handoff"}
+{"type":"human_action","action":{"kind":"key","control":"override_code","value":"«redacted»"},"at":"2026-08-13T19:32:54.581Z","runId":"replay_handoff"}
+{"type":"human_action","action":{"kind":"key","control":"override_code","value":"«redacted»"},"at":"2026-08-13T19:32:54.581Z","runId":"replay_handoff"}
+{"type":"human_action","action":{"kind":"input","control":"override_code","value":"«redacted»"},"at":"2026-08-13T19:32:54.600Z","runId":"replay_handoff"}
+{"type":"human_action","action":{"kind":"click","control":"Confirm & Open Account"},"at":"2026-08-13T19:32:54.601Z","runId":"replay_handoff"}
+{"type":"human_action","action":{"kind":"navigation","url":"http://127.0.0.1:57909/workspace/member/«redacted»/subaccount/submit"},"at":"2026-08-13T19:32:54.610Z","runId":"replay_handoff"}
+{"type":"lease_change","state":{"phase":"resuming","holder":null},"at":"2026-08-13T19:32:54.618Z","runId":"replay_handoff"}
+{"type":"lease_change","state":{"phase":"agent_running","holder":"agent"},"at":"2026-08-13T19:32:54.627Z","runId":"replay_handoff"}
+{"type":"result","status":"success","detail":{"status":"success","outputs":{"account_number":"«redacted»"},"evidence":"/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/evidence/replay_handoff","stability":{"resolutions":9,"matched_tiers":{"1":9},"rescued_steps":[]},"intervention":{"count":1,"requestIds":["replay_handoff_int_1"]}},"at":"2026-08-13T19:32:54.641Z","runId":"replay_handoff"}

@@ -15,7 +15,7 @@
     "provenance": {
       "discovered_by": "claude-sonnet-4-6",
       "discovery_run": "discovery_anthropic",
-      "recorded_at": "2026-08-13T18:36:25.795Z",
+      "recorded_at": "2026-08-13T19:31:58.498Z",
       "approved_by": null,
       "approved_at": null
     }
@@ -62,6 +62,67 @@
   "steps": [
     {
       "id": "s1",
+      "intent": "Enter member number {{member_id}} in the search field.",
+      "action": {
+        "kind": "type",
+        "value_from": {
+          "param": "member_id"
+        },
+        "sensitive": true
+      },
+      "target": {
+        "frame": "workarea",
+        "strategies": [
+          {
+            "kind": "label_proximity",
+            "label": "Member No.",
+            "control": "input",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.85
+          },
+          {
+            "kind": "attr_css",
+            "value": "input[name=\"f_mno\"]",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/div/form/table/tbody/tr[2]/td[2]/input",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.19761029411764705,
+              0.18405400302114805,
+              0.19301470588235295,
+              0.04380664652567976
+            ],
+            "nearText": "Member No.",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "value_equals_param",
+          "param": "member_id"
+        }
+      ]
+    },
+    {
+      "id": "s2",
       "intent": "Enter member number {{member_id}} in the search field.",
       "action": {
         "kind": "type",
@@ -121,7 +182,7 @@
       ]
     },
     {
-      "id": "s2",
+      "id": "s3",
       "intent": "The member number {{member_id}} is already filled in the search box. I'll click Search to look up the member.",
       "action": {
         "kind": "click"
@@ -174,8 +235,8 @@
       "postconditions": []
     },
     {
-      "id": "s3",
-      "intent": "Click \"Open Member\" to navigate to member {{member_id}}'s detail screen where I can find their name and savings balance.",
+      "id": "s4",
+      "intent": "I can see member {{member_id}} \"Alex Testman\" in the search results. I need to open their member record to get the savings balance details.",
       "action": {
         "kind": "click"
       },
@@ -316,7 +377,8 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3"
+        "s3",
+        "s4"
       ],
       "when": [
         {
@@ -334,7 +396,8 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3"
+        "s3",
+        "s4"
       ],
       "when": [
         {

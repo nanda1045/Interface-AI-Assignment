@@ -9,10 +9,10 @@
         "kind": "type",
         "ref": "o1f1-4",
         "text": "«redacted»",
-        "sensitive": false
+        "sensitive": true
       },
       "locators": {
-        "capturedAt": "2026-08-13T18:36:14.188Z",
+        "capturedAt": "2026-08-13T19:31:45.526Z",
         "strategies": [
           {
             "kind": "label_proximity",
@@ -39,10 +39,10 @@
           {
             "kind": "geometry",
             "bboxPct": [
-              0.«redacted»,
-              0.«redacted»,
-              0.«redacted»,
-              0.«redacted»
+              0.19761029411764705,
+              0.18405400302114805,
+              0.19301470588235295,
+              0.04380664652567976
             ],
             "nearText": "Member No.",
             "frame": "workarea",
@@ -56,13 +56,65 @@
     },
     {
       "step": 2,
+      "reasoning": "Enter member number «redacted» in the search field.",
+      "action": {
+        "kind": "type",
+        "ref": "o2f1-4",
+        "text": "«redacted»",
+        "sensitive": false
+      },
+      "locators": {
+        "capturedAt": "2026-08-13T19:31:47.893Z",
+        "strategies": [
+          {
+            "kind": "label_proximity",
+            "label": "Member No.",
+            "control": "input",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.85
+          },
+          {
+            "kind": "attr_css",
+            "value": "input[name=\"f_mno\"]",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/div/form/table/tbody/tr[2]/td[2]/input",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.19761029411764705,
+              0.18405400302114805,
+              0.19301470588235295,
+              0.04380664652567976
+            ],
+            "nearText": "Member No.",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "beforeUrl": "http://localhost:4478/desk",
+      "afterUrl": "http://localhost:4478/desk"
+    },
+    {
+      "step": 3,
       "reasoning": "The member number «redacted» is already filled in the search box. I'll click Search to look up the member.",
       "action": {
         "kind": "click",
-        "ref": "o2f1-7"
+        "ref": "o3f1-7"
       },
       "locators": {
-        "capturedAt": "2026-08-13T18:36:17.017Z",
+        "capturedAt": "2026-08-13T19:31:50.201Z",
         "strategies": [
           {
             "kind": "role_name",
@@ -90,10 +142,10 @@
           {
             "kind": "geometry",
             "bboxPct": [
-              0.«redacted»,
-              0.«redacted»,
+              0.19761029411764705,
+              0.2565615558912387,
               0.06640625,
-              0.«redacted»
+              0.04682779456193353
             ],
             "nearText": "Search",
             "frame": "workarea",
@@ -106,14 +158,14 @@
       "afterUrl": "http://localhost:4478/desk"
     },
     {
-      "step": 3,
-      "reasoning": "Click \"Open Member\" to navigate to member «redacted»'s detail screen where I can find their name and savings balance.",
+      "step": 4,
+      "reasoning": "I can see member «redacted» \"«redacted»\" in the search results. I need to open their member record to get the savings balance details.",
       "action": {
         "kind": "click",
-        "ref": "o3f1-9"
+        "ref": "o4f1-9"
       },
       "locators": {
-        "capturedAt": "2026-08-13T18:36:19.582Z",
+        "capturedAt": "2026-08-13T19:31:53.151Z",
         "strategies": [
           {
             "kind": "role_name",
@@ -146,7 +198,7 @@
   ],
   "outputs": {
     "member_name": {
-      "capturedAt": "2026-08-13T18:36:22.570Z",
+      "capturedAt": "2026-08-13T19:31:55.909Z",
       "strategies": [
         {
           "kind": "label_adjacent_cell",
@@ -165,7 +217,7 @@
       ]
     },
     "savings_balance": {
-      "capturedAt": "2026-08-13T18:36:25.788Z",
+      "capturedAt": "2026-08-13T19:31:58.487Z",
       "strategies": [
         {
           "kind": "label_adjacent_cell",
