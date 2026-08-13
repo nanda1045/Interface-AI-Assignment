@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>CorePoint Sign In</title><link rel="stylesheet" href="/legacy.css"></head>
+  <body style="--accent: <%= tenant.accent %>">
+    <div class="login-wrap">
+      <h1><%= tenant.brand %></h1>
+      <h2>CorePoint Teller Sign In</h2>
+      <% if (error) { %><div class="notice error">The user name or password was not accepted.</div><% } %>
+      <form method="post" action="/login">
+        <input type="hidden" name="returnTo" value="<%= returnTo %>">
+        <table class="panel">
+          <tr><td class="label-cell">User Name</td><td><input name="user" autocomplete="username"></td></tr>
+          <tr><td class="label-cell">Password</td><td><input name="pass" type="password" autocomplete="current-password"></td></tr>
+          <tr><td></td><td><button type="submit">Sign In</button></td></tr>
+        </table>
+      </form>
+      <p class="muted">Training environment · fictional records only</p>
+    </div>
+  </body>
+</html>

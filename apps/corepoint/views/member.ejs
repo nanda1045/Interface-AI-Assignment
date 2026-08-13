@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Member Profile</title><link rel="stylesheet" href="/legacy.css"></head>
+  <body style="--accent: <%= tenant.accent %>">
+    <div class="page"><h2>Member Profile</h2>
+      <table class="panel"><tr><td class="label-cell"><%= tenant.memberLabel %></td><td><%= member.id %></td><td class="label-cell">Member Name</td><td><%= member.name %></td></tr><tr><td class="label-cell">Status</td><td><%= member.status %></td><td class="label-cell">Phone</td><td><%= member.phone %></td></tr></table>
+      <h3>Deposit Accounts</h3>
+      <table class="panel"><tr><% tenant.accountsColumns.forEach(function(column) { %><th><%= column === 'account' ? 'Account No.' : column === 'type' ? 'Product' : 'Current Balance' %></th><% }) %></tr><% member.accounts.forEach(function(account, index) { %><tr class="<%= index % 2 ? 'row-alt' : '' %>"><% tenant.accountsColumns.forEach(function(column) { %><td><%= account[column] %></td><% }) %></tr><% }) %></table>
+      <p><a class="button-link" href="/workspace/member/<%= member.id %>/subaccount/new">Open New Sub-Account</a> <a class="button-link secondary" href="/workspace/search">Back to Search</a></p>
+    </div>
+  </body>
+</html>

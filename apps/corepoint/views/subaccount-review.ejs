@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Review New Sub-Account</title><link rel="stylesheet" href="/legacy.css"></head>
+  <body style="--accent: <%= tenant.accent %>">
+    <div class="page"><h2>Review New Sub-Account</h2><div class="notice">Review the details carefully. Selecting Confirm creates a new account record.</div>
+      <table class="panel"><tr><td class="label-cell">Member</td><td><%= member.name %> (<%= member.id %>)</td></tr><tr><td class="label-cell">Sub-Account Type</td><td><%= values.product %></td></tr><tr><td class="label-cell">Nickname</td><td><%= values.nickname || '—' %></td></tr><tr><td class="label-cell">Opening Deposit</td><td>$<%= values.openingDeposit %></td></tr></table>
+      <form method="post" action="/workspace/member/<%= member.id %>/subaccount/submit"><input type="hidden" name="product" value="<%= values.product %>"><input type="hidden" name="nickname" value="<%= values.nickname %>"><input type="hidden" name="opening_deposit" value="<%= values.openingDeposit %>">
+        <% if (supervisorRequired) { %><div class="notice error"><strong>Supervisor override required.</strong><p>A supervisor must enter an authorization code before this account can be opened.</p><table><tr><td>Override Code</td><td><input name="override_code" type="password" autocomplete="off"></td></tr></table></div><% } %>
+        <p><button type="submit">Confirm &amp; Open Account</button> <a class="button-link secondary" href="/workspace/member/<%= member.id %>/subaccount/new">Edit</a></p>
+      </form>
+    </div>
+  </body>
+</html>

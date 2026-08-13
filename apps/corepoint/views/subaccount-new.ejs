@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>New Sub-Account</title><link rel="stylesheet" href="/legacy.css"></head>
+  <body style="--accent: <%= tenant.accent %>">
+    <div class="page"><h2>Open New Sub-Account</h2><p>Member: <strong><%= member.name %> (<%= member.id %>)</strong></p>
+      <% if (errors.length) { %><div class="notice error"><strong>Please correct the following:</strong><ul><% errors.forEach(function(error) { %><li><%= error %></li><% }) %></ul></div><% } %>
+      <form method="post" action="/workspace/member/<%= member.id %>/subaccount/review"><table class="panel"><tr><td class="label-cell">Sub-Account Type</td><td><select name="product"><option value="">Choose one</option><option <%= values.product === 'Holiday Savings' ? 'selected' : '' %>>Holiday Savings</option><option <%= values.product === 'Vacation Savings' ? 'selected' : '' %>>Vacation Savings</option></select></td></tr><tr><td class="label-cell">Nickname</td><td><input name="nickname" value="<%= values.nickname || '' %>"></td></tr><tr><td class="label-cell">Opening Deposit</td><td>$ <input name="opening_deposit" inputmode="decimal" value="<%= values.openingDeposit || '' %>"></td></tr><tr><td></td><td><button type="submit">Review</button></td></tr></table></form>
+    </div>
+  </body>
+</html>

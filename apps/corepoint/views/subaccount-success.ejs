@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Sub-Account Opened</title><link rel="stylesheet" href="/legacy.css"></head>
+  <body style="--accent: <%= tenant.accent %>"><div class="page"><h2>Sub-Account Opened</h2><div class="notice success"><strong>Account successfully opened.</strong></div><table class="panel"><tr><td class="label-cell">New Account No.</td><td><%= accountNumber %></td></tr><tr><td class="label-cell">Product</td><td><%= values.product %></td></tr><tr><td class="label-cell">Member</td><td><%= member.name %></td></tr></table><p><a class="button-link" href="/workspace/member/<%= member.id %>">Return to Member Profile</a></p></div></body>
+</html>

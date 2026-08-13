@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Search Results</title><link rel="stylesheet" href="/legacy.css"></head>
+  <body style="--accent: <%= tenant.accent %>">
+    <div class="page"><h2>Member Search Results</h2>
+      <% if (denied) { %>
+        <div class="notice error"><strong>Access denied — insufficient permissions.</strong><br>Member <%= memberId %> is restricted to the Member Security team.</div>
+      <% } else if (!member) { %>
+        <div class="notice">No member found for <strong><%= memberId %></strong>.</div>
+      <% } else { %>
+        <table class="panel"><tr><th><%= tenant.memberLabel %></th><th>Name</th><th>Status</th><th>Action</th></tr><tr><td><%= member.id %></td><td><%= member.name %></td><td><%= member.status %></td><td><a href="/workspace/member/<%= member.id %>">Open Member</a></td></tr></table>
+      <% } %>
+      <p><a class="button-link secondary" href="/workspace/search">New Search</a></p>
+    </div>
+  </body>
+</html>

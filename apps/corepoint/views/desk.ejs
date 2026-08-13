@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title><%= tenant.brand %> — CorePoint</title><link rel="stylesheet" href="/legacy.css"></head>
+  <body style="--accent: <%= tenant.accent %>">
+    <table class="shell">
+      <tr><td class="banner" colspan="2"><h1><%= tenant.brand %></h1><span class="vendor">CorePoint Systems 3.1 · Tenant <%= tenant.id.toUpperCase() %></span></td></tr>
+      <tr>
+        <td class="nav"><strong>Teller Operations</strong><a href="/workspace/search" target="workarea">Member Search</a><a href="/workspace/search" target="workarea">Account Services</a><a href="/login">Sign Out</a></td>
+        <td class="workspace-cell"><iframe class="workspace" name="workarea" title="Teller work area" src="/workspace/search"></iframe></td>
+      </tr>
+    </table>
+  </body>
+</html>

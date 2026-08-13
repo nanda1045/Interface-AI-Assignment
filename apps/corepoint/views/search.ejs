@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Member Search</title><link rel="stylesheet" href="/legacy.css"></head>
+  <body style="--accent: <%= tenant.accent %>">
+    <div class="page">
+      <h2>Member Search</h2>
+      <form method="post" action="/workspace/search">
+        <table class="panel">
+          <tr><td class="section-head" colspan="2"><strong>Search Criteria</strong></td></tr>
+          <tr><td class="label-cell"><%= tenant.memberLabel %></td><td><input name="<%= tenant.memberField %>" inputmode="numeric" autocomplete="off"></td></tr>
+          <tr><td></td><td><button type="submit">Search</button></td></tr>
+        </table>
+      </form>
+    </div>
+    <% if (showTimeout) { %>
+      <div class="modal-shade"><div class="modal" role="dialog" aria-labelledby="timeout-title"><h2 id="timeout-title">Session expiring</h2><p>Your teller session will expire due to inactivity. Continue working?</p><form method="post" action="/workspace/session/continue"><input type="hidden" name="returnTo" value="/workspace/search"><button type="submit">Continue</button></form></div></div>
+    <% } %>
+  </body>
+</html>

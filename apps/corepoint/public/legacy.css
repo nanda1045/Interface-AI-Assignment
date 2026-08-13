@@ -1,0 +1,29 @@
+:root { color-scheme: light; font-family: Arial, Helvetica, sans-serif; color: #17202a; background: #e5e8eb; }
+* { box-sizing: border-box; }
+body { margin: 0; font-size: 14px; }
+a { color: var(--accent, #174a7e); }
+.shell { width: 100%; height: 100vh; border-collapse: collapse; }
+.banner { height: 58px; padding: 10px 18px; color: #fff; background: var(--accent, #174a7e); }
+.banner h1 { display: inline; font-size: 20px; }
+.vendor { float: right; margin-top: 4px; font-size: 12px; opacity: .9; }
+.nav { width: 190px; vertical-align: top; padding: 18px 10px; background: #d4d8dc; border-right: 1px solid #a8afb5; }
+.nav a { display: block; padding: 9px; margin-bottom: 4px; color: #18334d; background: #f3f4f5; border: 1px solid #b4bbc1; text-decoration: none; }
+.workspace-cell { vertical-align: top; background: #fff; }
+.workspace { width: 100%; height: calc(100vh - 58px); border: 0; background: #fff; }
+.page { padding: 18px 22px; background: #fff; min-height: 100vh; }
+.panel { border: 1px solid #9ca6af; border-collapse: collapse; min-width: 620px; background: #fafafa; }
+.panel td, .panel th { border: 1px solid #c0c6cb; padding: 9px 12px; text-align: left; }
+.panel th, .section-head { background: #d9e3eb; }
+.label-cell { width: 180px; font-weight: bold; background: #edf0f2; }
+.c1 { padding: 5px; }
+.row-alt { background: #f0f2f3; }
+input, select { min-width: 210px; padding: 6px; border: 1px solid #7d8993; }
+button, .button-link { display: inline-block; padding: 7px 14px; border: 1px solid #52697b; color: #fff; background: var(--accent, #174a7e); text-decoration: none; cursor: pointer; }
+.secondary { color: #263746; background: #e7eaec; }
+.notice { max-width: 720px; padding: 12px 15px; margin: 12px 0; border: 1px solid #c18e27; background: #fff3cd; }
+.error { border-color: #a43131; color: #711d1d; background: #f8dddd; }
+.success { border-color: #2e7542; color: #174d28; background: #dff1e3; }
+.modal-shade { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, .45); }
+.modal { width: 390px; padding: 22px; border: 3px solid #7b611a; background: #fff; box-shadow: 0 8px 30px #111; }
+.login-wrap { width: 520px; margin: 90px auto; padding: 22px; border: 1px solid #8b969f; background: #fff; }
+.muted { color: #55636f; font-size: 12px; }
