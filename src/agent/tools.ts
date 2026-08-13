@@ -12,7 +12,7 @@ export const agentTools: ToolDefinition[] = [
   { name: "select", description: "Select an option value.", parameters: strictObject({ ref: { type: "string" }, value: { type: "string" }, ...reasoning }, ["ref", "value", "reasoning"]) },
   { name: "press", description: "Press a keyboard key.", parameters: strictObject({ key: { type: "string" }, ...reasoning }, ["key", "reasoning"]) },
   { name: "scroll", description: "Scroll the current page.", parameters: strictObject({ direction: { type: "string", enum: ["up", "down"] }, ...reasoning }, ["direction", "reasoning"]) },
-  { name: "note_output", description: "Mark a visible ref as a named goal output before finishing.", parameters: strictObject({ name: { type: "string" }, ref: { type: "string" }, ...reasoning }, ["name", "ref", "reasoning"]) },
+  { name: "note_output", description: "Mark a visible ref as a named goal output before finishing. Never use a name already listed in marked_outputs.", parameters: strictObject({ name: { type: "string" }, ref: { type: "string" }, ...reasoning }, ["name", "ref", "reasoning"]) },
   { name: "finish", description: "Finish only after the goal is visibly satisfied and outputs were marked.", parameters: strictObject({ ...reasoning }, ["reasoning"]) },
   { name: "escalate", description: "Stop and request a human when blocked or unsafe.", parameters: strictObject({ reason: { type: "string" }, ...reasoning }, ["reason", "reasoning"]) }
 ];

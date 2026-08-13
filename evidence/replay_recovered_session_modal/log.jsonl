@@ -1,0 +1,13 @@
+{"type":"run_started","goal":"Look up member savings balance","target":"http://localhost:4478/desk","model":"deterministic-replay","at":"2026-08-13T18:37:36.688Z","runId":"replay_recovered_session_modal"}
+{"type":"policy_check","step":0,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:36.689Z","runId":"replay_recovered_session_modal"}
+{"type":"action","step":0,"action":{"kind":"navigate","url":"http://localhost:4478/desk"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:37:36.702Z","runId":"replay_recovered_session_modal"}
+{"type":"policy_check","step":1,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:36.754Z","runId":"replay_recovered_session_modal"}
+{"type":"action","step":1,"action":{"kind":"click","ref":"r1"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:37:36.787Z","runId":"replay_recovered_session_modal"}
+{"type":"recovery_applied","step":1,"rule":"dismiss_session_modal","at":"2026-08-13T18:37:36.787Z","runId":"replay_recovered_session_modal"}
+{"type":"policy_check","step":1,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:36.830Z","runId":"replay_recovered_session_modal"}
+{"type":"action","step":1,"action":{"kind":"type","ref":"r2","text":"«redacted»"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:37:36.833Z","runId":"replay_recovered_session_modal"}
+{"type":"policy_check","step":2,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:36.849Z","runId":"replay_recovered_session_modal"}
+{"type":"action","step":2,"action":{"kind":"click","ref":"r4"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:37:36.880Z","runId":"replay_recovered_session_modal"}
+{"type":"policy_check","step":3,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:36.901Z","runId":"replay_recovered_session_modal"}
+{"type":"action","step":3,"action":{"kind":"click","ref":"r5"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:37:36.926Z","runId":"replay_recovered_session_modal"}
+{"type":"result","status":"success","detail":{"status":"success","outputs":{"member_name":"«redacted»","savings_balance":"«redacted»"},"evidence":"/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/evidence/replay_recovered_session_modal","stability":{"resolutions":6,"matched_tiers":{"1":6},"rescued_steps":[]}},"at":"2026-08-13T18:37:36.962Z","runId":"replay_recovered_session_modal"}

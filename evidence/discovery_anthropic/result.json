@@ -1,0 +1,187 @@
+{
+  "status": "success",
+  "runId": "discovery_anthropic",
+  "steps": [
+    {
+      "step": 1,
+      "reasoning": "Enter member number «redacted» in the search field.",
+      "action": {
+        "kind": "type",
+        "ref": "o1f1-4",
+        "text": "«redacted»",
+        "sensitive": false
+      },
+      "locators": {
+        "capturedAt": "2026-08-13T18:36:14.188Z",
+        "strategies": [
+          {
+            "kind": "label_proximity",
+            "label": "Member No.",
+            "control": "input",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.85
+          },
+          {
+            "kind": "attr_css",
+            "value": "input[name=\"f_mno\"]",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/div/form/table/tbody/tr[2]/td[2]/input",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.«redacted»,
+              0.«redacted»,
+              0.«redacted»,
+              0.«redacted»
+            ],
+            "nearText": "Member No.",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "beforeUrl": "http://localhost:4478/desk",
+      "afterUrl": "http://localhost:4478/desk"
+    },
+    {
+      "step": 2,
+      "reasoning": "The member number «redacted» is already filled in the search box. I'll click Search to look up the member.",
+      "action": {
+        "kind": "click",
+        "ref": "o2f1-7"
+      },
+      "locators": {
+        "capturedAt": "2026-08-13T18:36:17.017Z",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Search",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "text",
+            "value": "Search",
+            "control": "button",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.8
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/div/form/table/tbody/tr[3]/td[2]/button",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.«redacted»,
+              0.«redacted»,
+              0.06640625,
+              0.«redacted»
+            ],
+            "nearText": "Search",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "beforeUrl": "http://localhost:4478/desk",
+      "afterUrl": "http://localhost:4478/desk"
+    },
+    {
+      "step": 3,
+      "reasoning": "Click \"Open Member\" to navigate to member «redacted»'s detail screen where I can find their name and savings balance.",
+      "action": {
+        "kind": "click",
+        "ref": "o3f1-9"
+      },
+      "locators": {
+        "capturedAt": "2026-08-13T18:36:19.582Z",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "link",
+            "name": "Open Member",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "text",
+            "value": "Open Member",
+            "control": "a",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.8
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/div/table/tbody/tr[2]/td[4]/a",
+            "frame": "workarea",
+            "unique": true,
+            "confidence": 0.5
+          }
+        ]
+      },
+      "beforeUrl": "http://localhost:4478/desk",
+      "afterUrl": "http://localhost:4478/desk"
+    }
+  ],
+  "outputs": {
+    "member_name": {
+      "capturedAt": "2026-08-13T18:36:22.570Z",
+      "strategies": [
+        {
+          "kind": "label_adjacent_cell",
+          "label": "Member Name",
+          "frame": "workarea",
+          "unique": true,
+          "confidence": 0.85
+        },
+        {
+          "kind": "structural",
+          "value": "/html/body/div/table[1]/tbody/tr[1]/td[4]",
+          "frame": "workarea",
+          "unique": true,
+          "confidence": 0.5
+        }
+      ]
+    },
+    "savings_balance": {
+      "capturedAt": "2026-08-13T18:36:25.788Z",
+      "strategies": [
+        {
+          "kind": "label_adjacent_cell",
+          "label": "Regular Savings",
+          "frame": "workarea",
+          "unique": true,
+          "confidence": 0.85
+        },
+        {
+          "kind": "structural",
+          "value": "/html/body/div/table[2]/tbody/tr[2]/td[3]",
+          "frame": "workarea",
+          "unique": true,
+          "confidence": 0.5
+        }
+      ]
+    }
+  }
+}

@@ -9,7 +9,7 @@ interface AnthropicResponse {
 export class AnthropicClient implements LLMClient {
   public readonly model: string;
 
-  public constructor(private readonly apiKey: string, model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514") {
+  public constructor(private readonly apiKey: string, model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6") {
     this.model = model;
   }
 
@@ -21,7 +21,7 @@ export class AnthropicClient implements LLMClient {
         model: this.model,
         max_tokens: 800,
         system: request.system,
-        messages: [{ role: "user", content: JSON.stringify({ goal: request.goal, observation: request.observation, history: request.history }) }],
+        messages: [{ role: "user", content: JSON.stringify({ goal: request.goal, marked_outputs: request.markedOutputs, observation: request.observation, history: request.history }) }],
         tools: agentTools.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.parameters })),
         tool_choice: { type: "any" },
         temperature: 0

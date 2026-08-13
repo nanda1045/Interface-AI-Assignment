@@ -1,0 +1,8 @@
+{
+  "status": "business_outcome",
+  "code": "MEMBER_NOT_FOUND",
+  "data": {
+    "found": false
+  },
+  "evidence": "/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/evidence/replay_business_outcome"
+}

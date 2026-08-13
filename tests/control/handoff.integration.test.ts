@@ -18,6 +18,7 @@ let server: Server;
 let browser: Browser;
 let origin: string;
 let root: string;
+let preserveEvidence = false;
 
 beforeAll(async () => {
   const tenant = tenants[0];
@@ -28,13 +29,15 @@ beforeAll(async () => {
   if (!address || typeof address === "string") throw new Error("Missing server address");
   origin = `http://127.0.0.1:${address.port}`;
   browser = await chromium.launch({ headless: true });
-  root = await mkdtemp(path.join(os.tmpdir(), "corepoint-handoff-"));
+  const configuredEvidenceRoot = process.env.HANDOFF_EVIDENCE_ROOT;
+  preserveEvidence = Boolean(configuredEvidenceRoot);
+  root = configuredEvidenceRoot ? path.resolve(configuredEvidenceRoot) : await mkdtemp(path.join(os.tmpdir(), "corepoint-handoff-"));
 });
 
 afterAll(async () => {
   await browser.close();
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-  await rm(root, { recursive: true, force: true });
+  if (!preserveEvidence) await rm(root, { recursive: true, force: true });
 });
 
 function capability(): CapabilityArtifact {
@@ -44,7 +47,7 @@ function capability(): CapabilityArtifact {
     schema_version: "1.0",
     capability: { id: "open_sub_account", version: "1.0.0", title: "Open a new sub-account", description: "Creates a new savings sub-account after review.", app: { id: "corepoint", vendor: "CorePoint", ui_version_range: ">=3.1" }, risk: "mutating", status: "approved", provenance: { discovered_by: "test", discovery_run: "disc_test", recorded_at: "2026-08-13T00:00:00.000Z", approved_by: "reviewer", approved_at: "2026-08-13T00:01:00.000Z" } },
     inputs: { type: "object", required: ["member_id", "account_type", "opening_deposit"], properties: { member_id: { type: "string", sensitive: true }, account_type: { type: "string" }, opening_deposit: { type: "string" } } },
-    outputs: { type: "object", required: ["account_number"], properties: { account_number: { type: "string" } } },
+    outputs: { type: "object", required: ["account_number"], properties: { account_number: { type: "string", sensitive: true } } },
     entry: { url: `${origin}/desk`, preconditions: [{ kind: "authenticated", via: "test session" }] },
     steps: [
       { id: "s1", intent: "Enter the member ID", action: { kind: "type", value_from: { param: "member_id" }, sensitive: true }, target: label("Member No.", "input"), wait: { readyWhen: "target_resolvable", timeout_ms: 2_000 }, postconditions: [{ kind: "value_equals_param", param: "member_id" }] },

@@ -44,12 +44,14 @@ export async function runDiscovery(options: {
   llm: LLMClient;
   logger: RunLogger;
   allowMutations?: boolean;
+  expectedOutputs?: string[];
 }): Promise<DiscoveryResult> {
   const { goal, target, surface, policy, llm, logger } = options;
   const steps: RecordedStep[] = [];
   const outputs: Record<string, LocatorBundle> = {};
   const history: { decision: string; result: string }[] = [];
   const hashVisits = new Map<string, number>();
+  let duplicateOutputMarks = 0;
   const startedAt = Date.now();
   await logger.initialize();
   for (const likelyIdentifier of goal.match(/\b\d{4,10}\b/g) ?? []) logger.markSensitive(likelyIdentifier);
@@ -75,9 +77,10 @@ export async function runDiscovery(options: {
     await logger.event({ type: "observation", step, url: observation.url, title: observation.title, stateHash: observation.stateHash, elementCount: observation.elements.length, ...(screenshot ? { screenshot } : {}) });
     const { screenshot: _ignored, ...modelObservation } = observation;
     void _ignored;
-    const response = await llm.decide({ system: discoverySystemPrompt(policy.config, Boolean(options.allowMutations)), goal, observation: modelObservation, history });
+    const markedOutputs = Object.keys(outputs);
+    const response = await llm.decide({ system: discoverySystemPrompt(policy.config, Boolean(options.allowMutations), options.expectedOutputs), goal, observation: modelObservation, history, markedOutputs });
     if (response.decision.kind === "type" && response.decision.sensitive) logger.markSensitive(response.decision.text);
-    await logger.transcript({ step, request: { goal, observation: modelObservation, history }, response: response.raw });
+    await logger.transcript({ step, request: { goal, markedOutputs, observation: modelObservation, history }, response: response.raw });
     const decision = response.decision;
     await logger.event({ type: "decision", step, reasoning: decision.reasoning, decision: decision.kind });
 
@@ -85,9 +88,25 @@ export async function runDiscovery(options: {
     if (decision.kind === "escalate") return finish("escalated", decision.reason);
     if (decision.kind === "note_output") {
       if (!observation.elements.some((element) => element.ref === decision.ref)) return finish("failure", `Model selected stale or unknown ref ${decision.ref}.`);
+      if (options.expectedOutputs?.length && !options.expectedOutputs.includes(decision.name)) {
+        history.push({ decision: "note_output", result: `${decision.name} is not in the declared output contract: ${options.expectedOutputs.join(", ")}.` });
+        continue;
+      }
+      if (outputs[decision.name]) {
+        duplicateOutputMarks += 1;
+        if (duplicateOutputMarks >= 3) return finish("escalated", `The model repeatedly marked the already-recorded output ${decision.name}.`);
+        history.push({ decision: "note_output", result: `${decision.name} is already marked; choose a different output or finish if the goal is complete.` });
+        continue;
+      }
       const locators = await surface.captureLocators(decision.ref);
+      const outputValue = await surface.read(decision.ref);
+      logger.markSensitive(outputValue.text);
+      if (outputValue.value) logger.markSensitive(outputValue.value);
       outputs[decision.name] = locators;
       await logger.event({ type: "output_marked", step, name: decision.name, locators });
+      if (options.expectedOutputs?.length && options.expectedOutputs.every((name) => outputs[name])) {
+        return finish("success", "Every declared output was visibly marked.");
+      }
       history.push({ decision: decision.kind, result: `Marked output ${decision.name}.` });
       continue;
     }
@@ -112,6 +131,7 @@ export async function runDiscovery(options: {
     const result: DiscoveryResult = { status, runId: logger.runId, steps, outputs, ...(status === "success" ? {} : { reason }) };
     await logger.event({ type: "result", status, detail: { reason, steps: steps.length, outputs: Object.keys(outputs) } });
     await logger.result(result);
+    await logger.finalizeRedaction();
     return result;
   }
 }

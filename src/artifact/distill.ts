@@ -38,7 +38,11 @@ function distillStep(recorded: RecordedStep, index: number, params: Record<strin
   const action = bindAction(recorded.action, params, used);
   const target = recorded.locators ? { frame: recorded.locators.strategies[0]?.frame, strategies: recorded.locators.strategies } : undefined;
   const targetName = recorded.locators?.strategies.find((strategy) => strategy.kind === "role_name");
-  const intent = recorded.reasoning || `${recorded.action.kind} ${targetName && "name" in targetName ? targetName.name : "the target control"}`;
+  const rawIntent = recorded.reasoning || `${recorded.action.kind} ${targetName && "name" in targetName ? targetName.name : "the target control"}`;
+  const intent = Object.entries(params).reduce(
+    (current, [name, value]) => value ? current.split(value).join(`{{${name}}}`) : current,
+    rawIntent
+  );
   const postconditions: CapabilityArtifact["steps"][number]["postconditions"] = [];
   if (action.kind === "type" || action.kind === "select") postconditions.push({ kind: "value_equals_param", param: action.value_from.param });
   if (recorded.afterUrl !== recorded.beforeUrl) postconditions.push({ kind: "url_matches", pattern: `^${recorded.afterUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` });

@@ -1,4 +1,4 @@
-import type { Browser, BrowserContext, Locator, Page } from "playwright";
+import type { Browser, BrowserContext, Frame, Locator, Page } from "playwright";
 import { digestFrame, getFramePath, stateHash } from "./digest.js";
 import { captureLocatorBundle } from "./locators.js";
 import { resolveTarget } from "./resolve.js";
@@ -25,12 +25,16 @@ export class WebSurface implements Surface {
     return `${prefix}${this.refSequence}`;
   }
 
-  private async locatorForRef(ref: ElementRef): Promise<Locator> {
+  private async locatorWithFrameForRef(ref: ElementRef): Promise<{ frame: Frame; locator: Locator }> {
     for (const frame of this.page.frames()) {
       const candidate = frame.locator(`[data-cu-ref="${ref}"]`);
-      if (await candidate.count() === 1) return candidate;
+      if (await candidate.count() === 1) return { frame, locator: candidate };
     }
     throw new Error(`Unknown or ambiguous element ref: ${ref}`);
+  }
+
+  private async locatorForRef(ref: ElementRef): Promise<Locator> {
+    return (await this.locatorWithFrameForRef(ref)).locator;
   }
 
   public async observe(options: { screenshot?: boolean } = {}): Promise<Observation> {
@@ -69,7 +73,21 @@ export class WebSurface implements Surface {
         await this.page.goto(action.url, { waitUntil: "domcontentloaded" });
         break;
       case "click":
-        await (await this.locatorForRef(action.ref)).click();
+        {
+          const { frame, locator } = await this.locatorWithFrameForRef(action.ref);
+          const navigatesFrame = await locator.evaluate((element) => {
+            const tag = element.tagName.toLowerCase();
+            return Boolean((tag === "a" && element.hasAttribute("href")) || element.closest("form"));
+          });
+          if (navigatesFrame) {
+            await Promise.all([
+              frame.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 2_000 }).catch(() => undefined),
+              locator.click()
+            ]);
+          } else {
+            await locator.click();
+          }
+        }
         break;
       case "focus":
         await (await this.locatorForRef(action.ref)).focus();

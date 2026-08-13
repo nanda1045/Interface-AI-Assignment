@@ -16,6 +16,7 @@ export interface DecideRequest {
   goal: string;
   observation: Omit<Observation, "screenshot">;
   history: { decision: string; result: string }[];
+  markedOutputs: string[];
 }
 
 export interface LLMClient {

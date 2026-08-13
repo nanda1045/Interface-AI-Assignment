@@ -1,0 +1,13 @@
+{
+  "status": "failure",
+  "failure": {
+    "class": "app_error",
+    "step": "s8",
+    "intent": "Confirm and open the account",
+    "expected": "A healthy application screen after the action.",
+    "observed": "The application displayed an unexpected error page.",
+    "domSnapshot": "failure/dom.html",
+    "resolutionAttempts": "failure/resolution-attempts.json"
+  },
+  "evidence": "/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/evidence/replay_hard_failure_error500"
+}

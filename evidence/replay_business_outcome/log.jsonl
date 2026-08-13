@@ -1,0 +1,9 @@
+{"type":"run_started","goal":"Look up member savings balance","target":"http://localhost:4478/desk","model":"deterministic-replay","at":"2026-08-13T18:37:33.057Z","runId":"replay_business_outcome"}
+{"type":"policy_check","step":0,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:33.060Z","runId":"replay_business_outcome"}
+{"type":"action","step":0,"action":{"kind":"navigate","url":"http://localhost:4478/desk"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:37:33.093Z","runId":"replay_business_outcome"}
+{"type":"policy_check","step":1,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:33.187Z","runId":"replay_business_outcome"}
+{"type":"action","step":1,"action":{"kind":"type","ref":"r1","text":"«redacted»"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:37:33.230Z","runId":"replay_business_outcome"}
+{"type":"policy_check","step":2,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:33.254Z","runId":"replay_business_outcome"}
+{"type":"action","step":2,"action":{"kind":"click","ref":"r3"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:37:33.286Z","runId":"replay_business_outcome"}
+{"type":"detector_hit","step":2,"detector":"MEMBER_NOT_FOUND","classification":"business_outcome","at":"2026-08-13T18:37:33.318Z","runId":"replay_business_outcome"}
+{"type":"result","status":"business_outcome","detail":{"status":"business_outcome","code":"MEMBER_NOT_FOUND","data":{"found":false},"evidence":"/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/evidence/replay_business_outcome"},"at":"2026-08-13T18:37:33.318Z","runId":"replay_business_outcome"}

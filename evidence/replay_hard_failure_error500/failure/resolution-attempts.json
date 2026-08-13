@@ -1,0 +1,13 @@
+[
+  {
+    "strategy": {
+      "kind": "role_name",
+      "role": "button",
+      "name": "Confirm & Open Account",
+      "frame": "workarea",
+      "unique": true,
+      "confidence": 0.9
+    },
+    "matched": 1
+  }
+]

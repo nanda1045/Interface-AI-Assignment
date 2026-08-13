@@ -34,7 +34,7 @@ class FakeSurface implements Surface {
 
   public async captureLocators(): Promise<LocatorBundle> { return bundle; }
   public async resolve() { return { ok: false as const, reason: "target_not_found" as const, attempts: [] }; }
-  public async read() { return { text: "" }; }
+  public async read() { return { text: "$2,481.13" }; }
   public async snapshotDom() { return "<html></html>"; }
   public async close() {}
 }
@@ -85,6 +85,39 @@ describe("runDiscovery", () => {
 
     const persisted = `${await readFile(path.join(logger.directory, "log.jsonl"), "utf8")}\n${await readFile(path.join(logger.directory, "transcript.jsonl"), "utf8")}\n${await readFile(path.join(logger.directory, "result.json"), "utf8")}`;
     expect(persisted).not.toContain("4521");
+    expect(persisted).not.toContain("$2,481.13");
     expect(persisted).toContain("«redacted»");
+  });
+
+  it("ignores a duplicate output mark so the model can continue or finish", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const surface = new FakeSurface();
+    const llm = new SequenceClient([
+      { kind: "note_output", ref: "field", name: "member_name", reasoning: "Mark the member name." },
+      { kind: "note_output", ref: "search", name: "member_name", reasoning: "Mark it again." },
+      { kind: "finish", reasoning: "The requested output is already marked." }
+    ]);
+
+    const result = await runDiscovery({ goal: "Read the member name", target: "http://localhost:4478/desk", surface, policy: new PolicyEngine(config), llm, logger: new RunLogger("disc_duplicate", root) });
+
+    expect(result).toMatchObject({ status: "success" });
+    expect(Object.keys(result.outputs)).toEqual(["member_name"]);
+  });
+
+  it("finishes when every declared output has been visibly marked", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const result = await runDiscovery({
+      goal: "Read the member name",
+      target: "http://localhost:4478/desk",
+      surface: new FakeSurface(),
+      policy: new PolicyEngine(config),
+      llm: new SequenceClient([{ kind: "note_output", ref: "field", name: "member_name", reasoning: "Mark the member name." }]),
+      logger: new RunLogger("disc_expected", root),
+      expectedOutputs: ["member_name"]
+    });
+
+    expect(result).toMatchObject({ status: "success", outputs: { member_name: bundle } });
   });
 });

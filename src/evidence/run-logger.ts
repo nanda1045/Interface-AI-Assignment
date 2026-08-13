@@ -1,6 +1,6 @@
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { redactValue } from "../policy/redact.js";
+import { redactString, redactValue } from "../policy/redact.js";
 import type { RunEvent } from "./events.js";
 
 export class RunLogger {
@@ -38,6 +38,22 @@ export class RunLogger {
 
   public async result(value: unknown): Promise<void> {
     await writeFile(path.join(this.directory, "result.json"), `${JSON.stringify(redactValue(value, [...this.sensitiveValues]), null, 2)}\n`, "utf8");
+  }
+
+  public async artifact(value: unknown): Promise<void> {
+    await writeFile(path.join(this.directory, "artifact.json"), `${JSON.stringify(redactValue(value, [...this.sensitiveValues]), null, 2)}\n`, "utf8");
+  }
+
+  public async finalizeRedaction(): Promise<void> {
+    for (const filename of ["log.jsonl", "transcript.jsonl", "result.json", "artifact.json"]) {
+      const destination = path.join(this.directory, filename);
+      try {
+        const current = await readFile(destination, "utf8");
+        await writeFile(destination, redactString(current, [...this.sensitiveValues]), "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
   }
 
   public async failureBundle(options: { screenshot?: string; dom: string; attempts?: unknown }): Promise<{ screenshot?: string; domSnapshot: string; resolutionAttempts?: string }> {

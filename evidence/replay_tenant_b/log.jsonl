@@ -1,0 +1,10 @@
+{"type":"run_started","goal":"Look up member savings balance","target":"http://localhost:4479/operations","model":"deterministic-replay","at":"2026-08-13T18:37:34.385Z","runId":"replay_tenant_b"}
+{"type":"policy_check","step":0,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:34.386Z","runId":"replay_tenant_b"}
+{"type":"action","step":0,"action":{"kind":"navigate","url":"http://localhost:4479/operations"},"resultUrl":"http://localhost:4479/operations","at":"2026-08-13T18:37:34.413Z","runId":"replay_tenant_b"}
+{"type":"policy_check","step":1,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:34.461Z","runId":"replay_tenant_b"}
+{"type":"action","step":1,"action":{"kind":"type","ref":"r1","text":"«redacted»"},"resultUrl":"http://localhost:4479/operations","at":"2026-08-13T18:37:34.479Z","runId":"replay_tenant_b"}
+{"type":"policy_check","step":2,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:34.501Z","runId":"replay_tenant_b"}
+{"type":"action","step":2,"action":{"kind":"click","ref":"r3"},"resultUrl":"http://localhost:4479/operations","at":"2026-08-13T18:37:34.524Z","runId":"replay_tenant_b"}
+{"type":"policy_check","step":3,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:37:34.568Z","runId":"replay_tenant_b"}
+{"type":"action","step":3,"action":{"kind":"click","ref":"r4"},"resultUrl":"http://localhost:4479/operations","at":"2026-08-13T18:37:34.585Z","runId":"replay_tenant_b"}
+{"type":"result","status":"success","detail":{"status":"success","outputs":{"member_name":"«redacted»","savings_balance":"«redacted»"},"evidence":"/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/evidence/replay_tenant_b","stability":{"resolutions":5,"matched_tiers":{"1":5},"rescued_steps":[]}},"at":"2026-08-13T18:37:34.623Z","runId":"replay_tenant_b"}

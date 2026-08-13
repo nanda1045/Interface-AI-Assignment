@@ -1,0 +1,20 @@
+{"type":"run_started","goal":"Open a new member sub-account","target":"http://localhost:4478/desk","model":"deterministic-replay","at":"2026-08-13T18:38:08.458Z","runId":"replay_hard_failure_error500"}
+{"type":"policy_check","step":0,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:38:08.460Z","runId":"replay_hard_failure_error500"}
+{"type":"action","step":0,"action":{"kind":"navigate","url":"http://localhost:4478/desk"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:38:08.498Z","runId":"replay_hard_failure_error500"}
+{"type":"policy_check","step":1,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:38:08.576Z","runId":"replay_hard_failure_error500"}
+{"type":"action","step":1,"action":{"kind":"type","ref":"r1","text":"«redacted»","sensitive":true},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:38:08.600Z","runId":"replay_hard_failure_error500"}
+{"type":"policy_check","step":2,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:38:08.623Z","runId":"replay_hard_failure_error500"}
+{"type":"action","step":2,"action":{"kind":"click","ref":"r3"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:38:08.650Z","runId":"replay_hard_failure_error500"}
+{"type":"policy_check","step":3,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:38:08.692Z","runId":"replay_hard_failure_error500"}
+{"type":"action","step":3,"action":{"kind":"click","ref":"r4"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:38:08.714Z","runId":"replay_hard_failure_error500"}
+{"type":"policy_check","step":4,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:38:08.737Z","runId":"replay_hard_failure_error500"}
+{"type":"action","step":4,"action":{"kind":"click","ref":"r5"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:38:08.764Z","runId":"replay_hard_failure_error500"}
+{"type":"policy_check","step":5,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:38:08.785Z","runId":"replay_hard_failure_error500"}
+{"type":"action","step":5,"action":{"kind":"select","ref":"r6","value":"Holiday Savings"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:38:08.788Z","runId":"replay_hard_failure_error500"}
+{"type":"policy_check","step":6,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:38:08.803Z","runId":"replay_hard_failure_error500"}
+{"type":"action","step":6,"action":{"kind":"type","ref":"r8","text":"25.00"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:38:08.806Z","runId":"replay_hard_failure_error500"}
+{"type":"policy_check","step":7,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:38:08.820Z","runId":"replay_hard_failure_error500"}
+{"type":"action","step":7,"action":{"kind":"click","ref":"r10"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:38:08.843Z","runId":"replay_hard_failure_error500"}
+{"type":"policy_check","step":8,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-13T18:38:08.864Z","runId":"replay_hard_failure_error500"}
+{"type":"action","step":8,"action":{"kind":"click","ref":"r11"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-13T18:38:08.892Z","runId":"replay_hard_failure_error500"}
+{"type":"result","status":"failure","detail":{"status":"failure","failure":{"class":"app_error","step":"s8","intent":"Confirm and open the account","expected":"A healthy application screen after the action.","observed":"The application displayed an unexpected error page.","domSnapshot":"failure/dom.html","resolutionAttempts":"failure/resolution-attempts.json"},"evidence":"/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/evidence/replay_hard_failure_error500"},"at":"2026-08-13T18:38:08.905Z","runId":"replay_hard_failure_error500"}

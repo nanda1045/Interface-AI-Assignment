@@ -1,0 +1,15 @@
+{
+  "status": "success",
+  "outputs": {
+    "member_name": "«redacted»",
+    "savings_balance": "«redacted»"
+  },
+  "evidence": "/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/evidence/replay_recovered_session_modal",
+  "stability": {
+    "resolutions": 6,
+    "matched_tiers": {
+      "1": 6
+    },
+    "rescued_steps": []
+  }
+}

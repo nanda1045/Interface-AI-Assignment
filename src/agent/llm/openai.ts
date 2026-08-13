@@ -22,7 +22,7 @@ export class OpenAIClient implements LLMClient {
         model: this.model,
         store: false,
         instructions: request.system,
-        input: JSON.stringify({ goal: request.goal, observation: request.observation, history: request.history }),
+        input: JSON.stringify({ goal: request.goal, marked_outputs: request.markedOutputs, observation: request.observation, history: request.history }),
         tools: agentTools.map((tool) => ({ type: "function", name: tool.name, description: tool.description, parameters: tool.parameters, strict: true })),
         tool_choice: "required",
         reasoning: { effort: "low" }

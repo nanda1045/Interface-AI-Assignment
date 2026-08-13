@@ -48,7 +48,12 @@ program.command("discover")
   .option("--title <title>", "artifact title")
   .option("--description <description>", "artifact description")
   .option("--param <name=value>", "bind a discovery value to an input parameter", (value, previous: string[]) => [...previous, value], [])
-  .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; capabilityId?: string; title?: string; description?: string; param: string[] }) => {
+  .option("--output <name>", "declared output name; repeat for multiple outputs", (value, previous: string[]) => [...previous, value], [])
+  .option("--artifact-root <path>", "artifact directory", "artifacts")
+  .option("--overwrite-artifact", "replace an existing artifact after a successful discovery", false)
+  .option("--run-root <path>", "run evidence directory", "runs")
+  .option("--run-id <id>", "explicit run id (useful for reproducible evidence)")
+  .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; capabilityId?: string; title?: string; description?: string; param: string[]; output: string[]; artifactRoot: string; overwriteArtifact: boolean; runRoot: string; runId?: string }) => {
     if (raw.provider !== "openai" && raw.provider !== "anthropic") throw new Error("--provider must be openai or anthropic.");
     const browser = await chromium.launch({ headless: raw.headless });
     const context = await browser.newContext();
@@ -60,10 +65,10 @@ program.command("discover")
     const page = await context.newPage();
     const surface = new WebSurface(page, { browser, context });
     const policy = await PolicyEngine.fromFile(raw.policy);
-    const logger = new RunLogger(createRunId("disc"));
+    const logger = new RunLogger(raw.runId ?? createRunId("disc"), raw.runRoot);
     const llm = chooseClient(raw.provider);
     try {
-      const result = await runDiscovery({ goal: raw.goal, target: raw.url, surface, policy, llm, logger, allowMutations: raw.allowMutations });
+      const result = await runDiscovery({ goal: raw.goal, target: raw.url, surface, policy, llm, logger, allowMutations: raw.allowMutations, expectedOutputs: raw.output });
       if (result.status === "success" && raw.capabilityId) {
         const params = parseAssignments(raw.param);
         const artifact = distillDiscovery(result, {
@@ -75,9 +80,11 @@ program.command("discover")
           runId: result.runId,
           params,
           inputs: { type: "object", required: Object.keys(params), properties: Object.fromEntries(Object.keys(params).map((name) => [name, { type: "string", sensitive: /member|account|ssn/i.test(name) }])) },
-          outputs: { type: "object", required: Object.keys(result.outputs), properties: Object.fromEntries(Object.keys(result.outputs).map((name) => [name, { type: "string", ...(name.includes("balance") ? { "x-format": "usd-currency" } : {}) }])) }
+          outputs: { type: "object", required: Object.keys(result.outputs), properties: Object.fromEntries(Object.keys(result.outputs).map((name) => [name, { type: "string", ...(/member|name|balance|account|ssn/i.test(name) ? { sensitive: true } : {}), ...(name.includes("balance") ? { "x-format": "usd-currency" } : {}) }])) }
         });
-        const artifactPath = await new ArtifactStore().save(artifact);
+        const store = new ArtifactStore(raw.artifactRoot);
+        const artifactPath = raw.overwriteArtifact ? await store.write(artifact) : await store.save(artifact);
+        await logger.artifact(artifact);
         console.error(`Draft artifact saved to ${artifactPath}`);
       }
       console.log(JSON.stringify(result, null, 2));
