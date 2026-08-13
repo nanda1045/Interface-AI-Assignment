@@ -15,7 +15,9 @@ export interface TierStats {
   rescued_steps: string[];
 }
 
+export interface InterventionSummary { count: number; requestIds: string[] }
+
 export type ReplayResult =
-  | { status: "success"; outputs: Record<string, unknown>; evidence: string; stability: TierStats }
-  | { status: "business_outcome"; code: string; data?: Record<string, unknown>; evidence: string }
-  | { status: "failure"; failure: { class: FailureClass; step: string; intent: string; expected: string; observed: string; screenshot?: string; domSnapshot: string; resolutionAttempts?: string }; evidence: string };
+  | { status: "success"; outputs: Record<string, unknown>; evidence: string; stability: TierStats; intervention?: InterventionSummary }
+  | { status: "business_outcome"; code: string; data?: Record<string, unknown>; evidence: string; intervention?: InterventionSummary }
+  | { status: "failure"; failure: { class: FailureClass; step: string; intent: string; expected: string; observed: string; screenshot?: string; domSnapshot: string; resolutionAttempts?: string }; evidence: string; intervention?: InterventionSummary };

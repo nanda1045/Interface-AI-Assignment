@@ -9,6 +9,9 @@ import { OpenAIClient } from "./agent/llm/openai.js";
 import { distillDiscovery } from "./artifact/distill.js";
 import { applyOverlay, loadOverlay } from "./artifact/overlay.js";
 import { ArtifactStore } from "./artifact/store.js";
+import { startConsole } from "./control/console-server.js";
+import { RunController } from "./control/controller.js";
+import { installHumanRecorder } from "./control/human-recorder.js";
 import { createRunId, RunLogger } from "./evidence/run-logger.js";
 import { PolicyEngine } from "./policy/engine.js";
 import { replay } from "./replay/engine.js";
@@ -102,7 +105,9 @@ program.command("replay")
   .option("--headless", "run without a visible browser", false)
   .option("--confirm-mutations", "interactively approved this mutating replay", false)
   .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
-  .action(async (reference: string, raw: { param: string[]; policy: string; artifactRoot: string; overlay?: string; chaos?: string; headless: boolean; confirmMutations: boolean; mockAuth: boolean }) => {
+  .option("--handoff", "enable same-session human intervention", false)
+  .option("--console-port <port>", "operator console port", "4590")
+  .action(async (reference: string, raw: { param: string[]; policy: string; artifactRoot: string; overlay?: string; chaos?: string; headless: boolean; confirmMutations: boolean; mockAuth: boolean; handoff: boolean; consolePort: string }) => {
     const store = new ArtifactStore(raw.artifactRoot);
     let artifact = await store.load(reference);
     if (raw.overlay) artifact = applyOverlay(artifact, await loadOverlay(raw.overlay));
@@ -114,12 +119,23 @@ program.command("replay")
       await context.addCookies([{ name: "cp_session", value: `teller:${entry.port === "4479" ? "b" : "a"}`, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
     }
     if (raw.chaos) await context.addCookies([{ name: "cp_chaos", value: raw.chaos, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
-    const surface = new WebSurface(await context.newPage(), { browser, context });
+    if (raw.handoff && raw.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
+    const page = await context.newPage();
+    const logger = new RunLogger(createRunId("replay"));
+    await logger.initialize();
+    const controller = raw.handoff ? new RunController(logger) : undefined;
+    const surface = new WebSurface(page, { browser, context, ...(controller ? { canAgentAct: () => controller.lease.agentCanAct() } : {}) });
+    const consoleServer = controller ? await startConsole(controller, Number(raw.consolePort)) : undefined;
+    if (controller) {
+      await installHumanRecorder(page, controller, logger);
+      console.error(`Operator console: http://127.0.0.1:${raw.consolePort}`);
+    }
     try {
-      const result = await replay({ artifact, params: parseAssignments(raw.param), surface, policy: await PolicyEngine.fromFile(raw.policy), logger: new RunLogger(createRunId("replay")), confirmMutations: raw.confirmMutations });
+      const result = await replay({ artifact, params: parseAssignments(raw.param), surface, policy: await PolicyEngine.fromFile(raw.policy), logger, confirmMutations: raw.confirmMutations, ...(controller ? { handoff: controller } : {}) });
       console.log(JSON.stringify(result, null, 2));
       if (result.status === "failure") process.exitCode = 1;
     } finally {
+      if (consoleServer) await new Promise<void>((resolve, reject) => consoleServer.close((error) => error ? reject(error) : resolve()));
       await surface.close();
     }
   });

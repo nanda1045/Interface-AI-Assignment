@@ -1,5 +1,7 @@
 import type { AbstractAction, LocatorBundle } from "../surface/types.js";
 import type { PolicyVerdict } from "../policy/engine.js";
+import type { InterventionRequest } from "../control/intervention.js";
+import type { ControlState } from "../control/lease.js";
 
 export type RunEvent =
   | { type: "run_started"; goal: string; target: string; model: string }
@@ -10,6 +12,9 @@ export type RunEvent =
   | { type: "output_marked"; step: number; name: string; locators: LocatorBundle }
   | { type: "detector_hit"; step: number; detector: string; classification: string }
   | { type: "recovery_applied"; step: number; rule: string }
+  | { type: "intervention_requested"; request: InterventionRequest }
+  | { type: "lease_change"; state: ControlState }
+  | { type: "human_action"; action: { kind: string; control?: string; value?: string; url?: string } }
   | { type: "stopped"; reason: string }
   | { type: "result"; status: "success" | "business_outcome" | "escalated" | "failure"; detail: unknown };
 

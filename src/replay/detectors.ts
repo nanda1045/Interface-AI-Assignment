@@ -36,3 +36,11 @@ export function detectGlobalFailure(observation: Observation): { class: "session
   if (/Unexpected Application Error|could not complete the request|HTTP\s*5\d\d/i.test(text)) return { class: "app_error", observed: "The application displayed an unexpected error page." };
   return undefined;
 }
+
+export function detectEscalation(observation: Observation): { reason: string; requestedAction: string } | undefined {
+  const text = pageText(observation);
+  if (/Supervisor override required/i.test(text)) return { reason: "Supervisor override required", requestedAction: "Enter an authorized supervisor code and submit the confirmation form." };
+  const dialog = observation.elements.find((element) => element.role === "dialog");
+  if (dialog) return { reason: `Unrecognized dialog: ${dialog.name || dialog.text || "dialog"}`, requestedAction: "Review and safely resolve the dialog." };
+  return undefined;
+}

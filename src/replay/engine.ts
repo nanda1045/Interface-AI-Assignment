@@ -1,8 +1,9 @@
 import type { CapabilityArtifact } from "../artifact/schema.js";
+import type { HandoffCoordinator } from "../control/intervention.js";
 import type { RunLogger } from "../evidence/run-logger.js";
 import { inferRisk, type PolicyEngine } from "../policy/engine.js";
 import type { AbstractAction, Observation, ResolutionFailure, ResolvedElement, Surface, TargetSpec } from "../surface/types.js";
-import { allPredicatesMatch, detectGlobalFailure, predicateMatches } from "./detectors.js";
+import { allPredicatesMatch, detectEscalation, detectGlobalFailure, predicateMatches } from "./detectors.js";
 import type { FailureClass, ReplayResult, TierStats } from "./result.js";
 
 export interface ReplayOptions {
@@ -12,6 +13,7 @@ export interface ReplayOptions {
   policy: PolicyEngine;
   logger: RunLogger;
   confirmMutations?: boolean;
+  handoff?: HandoffCoordinator;
 }
 
 function validateInputs(artifact: CapabilityArtifact, params: Record<string, unknown>): string | undefined {
@@ -116,52 +118,78 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   const entryResult = await surface.act(entryAction);
   await logger.event({ type: "action", step: 0, action: entryAction, resultUrl: entryResult.url });
 
-  for (const [index, step] of artifact.steps.entries()) {
-    if (Date.now() > deadline) return fail("timeout", `Replay within ${artifact.policy.max_duration_ms}ms.`, "Capability duration limit was exceeded.");
-    currentStep = step.id;
-    currentIntent = step.intent;
-    let observation = await surface.observe();
-    const preGlobal = detectGlobalFailure(observation);
-    if (preGlobal) return fail(preGlobal.class, "An authenticated, healthy application screen.", preGlobal.observed);
+  stepsLoop: for (const [index, step] of artifact.steps.entries()) {
+    let retryCurrentStep = true;
+    while (retryCurrentStep) {
+      retryCurrentStep = false;
+      if (Date.now() > deadline) return fail("timeout", `Replay within ${artifact.policy.max_duration_ms}ms.`, "Capability duration limit was exceeded.");
+      currentStep = step.id;
+      currentIntent = step.intent;
+      let observation = await surface.observe();
+      const preGlobal = detectGlobalFailure(observation);
+      if (preGlobal) {
+        if (preGlobal.class !== "session_lost" || !options.handoff) return fail(preGlobal.class, "An authenticated, healthy application screen.", preGlobal.observed);
+        const resume = await requestHandoff(step, observation, preGlobal.observed, "Re-authenticate in the live browser session.");
+        if (resume === "checkpoint") break stepsLoop;
+        if (resume === "retry") { retryCurrentStep = true; continue; }
+        if (resume === "completed") break;
+        return fail("precondition_failed", "A resumable state after human handoff.", "State diverged after handoff.");
+      }
 
-    const recovered = await applyRecovery(observation, index + 1);
-    if (recovered) observation = await surface.observe();
-    const preOutcome = await detectOutcome(step.id, observation);
-    if (preOutcome) return preOutcome;
+      const recovered = await applyRecovery(observation, index + 1);
+      if (recovered) observation = await surface.observe();
+      const preEscalation = detectEscalation(observation);
+      if (preEscalation && options.handoff) {
+        const resume = await requestHandoff(step, observation, preEscalation.reason, preEscalation.requestedAction);
+        if (resume === "checkpoint") break stepsLoop;
+        if (resume === "retry") { retryCurrentStep = true; continue; }
+        if (resume === "completed") break;
+        return fail("precondition_failed", "A resumable state after human handoff.", "State diverged after handoff.");
+      }
+      const preOutcome = await detectOutcome(step.id, observation);
+      if (preOutcome) return preOutcome;
 
-    let resolved: ResolvedElement | undefined;
-    if (step.target) {
-      const resolution = await resolveWithWait(surface, step.target, step.wait.timeout_ms);
-      lastAttempts = resolution.attempts;
-      if (!resolution.ok) return fail("target_not_found", "One unique, visible, enabled locator strategy to resolve.", "Every locator strategy was exhausted.");
-      resolved = resolution;
-      recordTier(stats, step.id, resolution);
-    }
-    const action = materializeAction(step, params, resolved?.ref);
-    const targetElement = resolved ? observation.elements.find((element) => element.ref === resolved?.ref) : undefined;
-    const risk = inferRisk(action, targetElement?.name ?? currentIntent);
-    const verdict = policy.check(action, { risk, allowMutations: artifact.capability.status === "approved" || options.confirmMutations, targetName: targetElement?.name });
-    await logger.event({ type: "policy_check", step: index + 1, verdict });
-    if (!verdict.allowed) return fail("policy_blocked", "An action permitted by policy and risk approval.", verdict.detail);
-    const actionResult = await surface.act(action);
-    await logger.event({ type: "action", step: index + 1, action, resultUrl: actionResult.url });
-    observation = await observeAfterAction(surface, observation.stateHash, step.wait.timeout_ms);
+      let resolved: ResolvedElement | undefined;
+      if (step.target) {
+        const resolution = await resolveWithWait(surface, step.target, step.wait.timeout_ms);
+        lastAttempts = resolution.attempts;
+        if (!resolution.ok) return fail("target_not_found", "One unique, visible, enabled locator strategy to resolve.", "Every locator strategy was exhausted.");
+        resolved = resolution;
+        recordTier(stats, step.id, resolution);
+      }
+      const action = materializeAction(step, params, resolved?.ref);
+      const targetElement = resolved ? observation.elements.find((element) => element.ref === resolved?.ref) : undefined;
+      const risk = inferRisk(action, targetElement?.name ?? currentIntent);
+      const verdict = policy.check(action, { risk, allowMutations: artifact.capability.status === "approved" || options.confirmMutations, targetName: targetElement?.name });
+      await logger.event({ type: "policy_check", step: index + 1, verdict });
+      if (!verdict.allowed) return fail("policy_blocked", "An action permitted by policy and risk approval.", verdict.detail);
+      const actionResult = await surface.act(action);
+      await logger.event({ type: "action", step: index + 1, action, resultUrl: actionResult.url });
+      observation = await observeAfterAction(surface, observation.stateHash, step.wait.timeout_ms);
 
-    const global = detectGlobalFailure(observation);
-    if (global) return fail(global.class, "A healthy application screen after the action.", global.observed);
-    const outcome = await detectOutcome(step.id, observation);
-    if (outcome) return outcome;
-    if (await applyRecovery(observation, index + 1)) observation = await surface.observe();
-
-    for (const predicate of step.postconditions) {
-      const predicateTarget = step.target;
-      const matches = predicate.kind === "value_equals_param"
-        ? Boolean(predicateTarget && await (async () => {
-            const current = await surface.resolve(predicateTarget);
-            return current.ok && (await surface.read(current.ref)).value === String(params[predicate.param]);
-          })())
-        : await predicateMatches(predicate, observation, surface);
-      if (!matches) return fail("postcondition_failed", JSON.stringify(predicate), `Postcondition did not match at ${observation.url}.`);
+      const global = detectGlobalFailure(observation);
+      if (global) {
+        if (global.class !== "session_lost" || !options.handoff) return fail(global.class, "A healthy application screen after the action.", global.observed);
+        const resume = await requestHandoff(step, observation, global.observed, "Re-authenticate in the live browser session.");
+        if (resume === "checkpoint") break stepsLoop;
+        if (resume === "retry") { retryCurrentStep = true; continue; }
+        if (resume === "completed") break;
+        return fail("precondition_failed", "A resumable state after human handoff.", "State diverged after handoff.");
+      }
+      const outcome = await detectOutcome(step.id, observation);
+      if (outcome) return outcome;
+      if (await applyRecovery(observation, index + 1)) observation = await surface.observe();
+      const escalation = detectEscalation(observation);
+      if (escalation && options.handoff) {
+        const resume = await requestHandoff(step, observation, escalation.reason, escalation.requestedAction);
+        if (resume === "checkpoint") break stepsLoop;
+        if (resume === "retry") { retryCurrentStep = true; continue; }
+        if (resume === "completed") break;
+        return fail("precondition_failed", "A resumable state after human handoff.", "State diverged after handoff.");
+      }
+      if (!(await postconditionsMatch(step, observation))) {
+        return fail("postcondition_failed", JSON.stringify(step.postconditions), `Postcondition did not match at ${observation.url}.`);
+      }
     }
   }
 
@@ -180,7 +208,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     const raw = (await surface.read(resolution.ref)).text;
     outputs[extraction.output] = extraction.parse === "number" ? Number(raw.replace(/[^0-9.-]/g, "")) : raw;
   }
-  const result: ReplayResult = { status: "success", outputs, evidence: logger.directory, stability: stats };
+  const result: ReplayResult = { status: "success", outputs, evidence: logger.directory, stability: stats, ...interventionPart() };
   await logger.event({ type: "result", status: "success", detail: result });
   await logger.result(result);
   return result;
@@ -189,7 +217,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     for (const outcome of artifact.outcomes) {
       if (!outcome.at_steps.includes(stepId)) continue;
       if (await allPredicatesMatch(outcome.when, observation, surface)) {
-        const result: ReplayResult = { status: "business_outcome", code: outcome.code, ...(outcome.returns ? { data: outcome.returns } : {}), evidence: logger.directory };
+        const result: ReplayResult = { status: "business_outcome", code: outcome.code, ...(outcome.returns ? { data: outcome.returns } : {}), evidence: logger.directory, ...interventionPart() };
         await logger.event({ type: "detector_hit", step: Number(stepId.replace(/^s/, "")) || 0, detector: outcome.code, classification: "business_outcome" });
         await logger.event({ type: "result", status: "business_outcome", detail: result });
         await logger.result(result);
@@ -226,11 +254,60 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     return false;
   }
 
+  async function postconditionsMatch(step: CapabilityArtifact["steps"][number], observation: Observation): Promise<boolean> {
+    for (const predicate of step.postconditions) {
+      const predicateTarget = step.target;
+      const matches = predicate.kind === "value_equals_param"
+        ? Boolean(predicateTarget && await (async () => {
+            const current = await surface.resolve(predicateTarget);
+            return current.ok && (await surface.read(current.ref)).value === String(params[predicate.param]);
+          })())
+        : await predicateMatches(predicate, observation, surface);
+      if (!matches) return false;
+    }
+    return true;
+  }
+
+  async function requestHandoff(
+    step: CapabilityArtifact["steps"][number],
+    observation: Observation,
+    reason: string,
+    requestedAction: string
+  ): Promise<"completed" | "retry" | "checkpoint" | "failed"> {
+    const handoff = options.handoff;
+    if (!handoff) return "failed";
+    let screenshot: string | undefined;
+    if (!sensitiveRun) screenshot = (await surface.observe({ screenshot: true })).screenshot;
+    await handoff.request({
+      runId: logger.runId,
+      capability: `${artifact.capability.id}@${artifact.capability.version}`,
+      goal: artifact.capability.title,
+      step: step.id,
+      intent: step.intent,
+      reason,
+      requestedAction,
+      ...(screenshot ? { screenshot } : {}),
+      recentEvents: [{ url: observation.url, title: observation.title, stateHash: observation.stateHash }]
+    });
+    const resumedObservation = await surface.observe();
+    let decision: "completed" | "retry" | "checkpoint" | "failed" = "failed";
+    if (await allPredicatesMatch(artifact.checkpoint.assert, resumedObservation, surface)) decision = "checkpoint";
+    else if (step.postconditions.length > 0 && await postconditionsMatch(step, resumedObservation)) decision = "completed";
+    else if (step.target && (await surface.resolve(step.target)).ok) decision = "retry";
+    await handoff.resume();
+    return decision;
+  }
+
+  function interventionPart(): { intervention?: { count: number; requestIds: string[] } } {
+    const summary = options.handoff?.summary();
+    return summary && summary.count > 0 ? { intervention: summary } : {};
+  }
+
   async function fail(failureClass: FailureClass, expected: string, observed: string): Promise<ReplayResult> {
     let observation: Observation | undefined;
     try { observation = await surface.observe({ screenshot: !sensitiveRun }); } catch { observation = undefined; }
     const bundle = await logger.failureBundle({ screenshot: observation?.screenshot, dom: await surface.snapshotDom(), ...(lastAttempts ? { attempts: lastAttempts } : {}) });
-    const result: ReplayResult = { status: "failure", failure: { class: failureClass, step: currentStep, intent: currentIntent, expected, observed, ...bundle }, evidence: logger.directory };
+    const result: ReplayResult = { status: "failure", failure: { class: failureClass, step: currentStep, intent: currentIntent, expected, observed, ...bundle }, evidence: logger.directory, ...interventionPart() };
     await logger.event({ type: "result", status: "failure", detail: result });
     await logger.result(result);
     return result;
