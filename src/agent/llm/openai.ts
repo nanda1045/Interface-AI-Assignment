@@ -1,5 +1,6 @@
 import { agentTools, parseDecision } from "../tools.js";
 import type { DecideRequest, LLMClient } from "./client.js";
+import { fetchWithRetry, type RetryOptions } from "./retry.js";
 
 interface OpenAIResponse {
   id: string;
@@ -10,12 +11,16 @@ interface OpenAIResponse {
 export class OpenAIClient implements LLMClient {
   public readonly model: string;
 
-  public constructor(private readonly apiKey: string, model = process.env.OPENAI_MODEL ?? "gpt-5.6-luna") {
+  public constructor(
+    private readonly apiKey: string,
+    model = process.env.OPENAI_MODEL ?? "gpt-5.6-luna",
+    private readonly retry: RetryOptions = {}
+  ) {
     this.model = model;
   }
 
   public async decide(request: DecideRequest) {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetchWithRetry("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify({
@@ -27,7 +32,7 @@ export class OpenAIClient implements LLMClient {
         tool_choice: "required",
         reasoning: { effort: "low" }
       })
-    });
+    }, this.retry);
     const payload = await response.json() as OpenAIResponse;
     if (!response.ok) throw new Error(`OpenAI Responses API error ${response.status}: ${payload.error?.message ?? "unknown error"}`);
     const call = payload.output?.find((item) => item.type === "function_call");

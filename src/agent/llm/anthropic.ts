@@ -1,5 +1,6 @@
 import { agentTools, parseDecision } from "../tools.js";
 import type { DecideRequest, LLMClient } from "./client.js";
+import { fetchWithRetry, type RetryOptions } from "./retry.js";
 
 interface AnthropicResponse {
   content?: { type: string; name?: string; input?: unknown }[];
@@ -9,12 +10,16 @@ interface AnthropicResponse {
 export class AnthropicClient implements LLMClient {
   public readonly model: string;
 
-  public constructor(private readonly apiKey: string, model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6") {
+  public constructor(
+    private readonly apiKey: string,
+    model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6",
+    private readonly retry: RetryOptions = {}
+  ) {
     this.model = model;
   }
 
   public async decide(request: DecideRequest) {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": this.apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
@@ -27,7 +32,7 @@ export class AnthropicClient implements LLMClient {
         // reject non-default temperature, so the client stays model-portable.
         tool_choice: { type: "any" }
       })
-    });
+    }, this.retry);
     const payload = await response.json() as AnthropicResponse;
     if (!response.ok) throw new Error(`Anthropic Messages API error ${response.status}: ${payload.error?.message ?? "unknown error"}`);
     const call = payload.content?.find((item) => item.type === "tool_use");
