@@ -1,6 +1,15 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fingerprintParams } from "./distill.js";
 import { capabilityArtifactSchema, type CapabilityArtifact } from "./schema.js";
+
+/** Proof that a replay of this capability actually succeeded, supplied by
+ *  whoever ran it. Approval will not proceed without it. */
+export interface ApprovalEvidence {
+  run: string;
+  params: Record<string, string>;
+  matchedTiers: Record<string, number>;
+}
 
 export class ArtifactStore {
   public constructor(private readonly root = "artifacts") {}
@@ -27,18 +36,53 @@ export class ArtifactStore {
 
   public async load(reference: string): Promise<CapabilityArtifact> {
     const filename = reference.endsWith(".json") ? reference : `${reference}.json`;
-    const contents = await readFile(path.resolve(this.root, filename), "utf8");
+    let contents: string;
+    try {
+      contents = await readFile(path.resolve(this.root, filename), "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const known = await this.list();
+      throw new Error(`No capability ${reference} in ${this.root}. Available: ${known.length > 0 ? known.join(", ") : "none"}`);
+    }
     return capabilityArtifactSchema.parse(JSON.parse(contents));
   }
 
-  public async approve(reference: string, approvedBy: string, now = new Date()): Promise<CapabilityArtifact> {
+  // Approval takes evidence, not a flag. A caller cannot flip the status without
+  // a replay that actually ran, and the record of it stays in the artifact so a
+  // reviewer can see what admitted the capability rather than who said so.
+  public async approve(reference: string, approvedBy: string, validation: ApprovalEvidence, now = new Date()): Promise<CapabilityArtifact> {
     const artifact = await this.load(reference);
+    if (artifact.capability.provenance.discovered_by === approvedBy) {
+      throw new Error("The approver cannot be the identity that recorded the capability.");
+    }
+    const fingerprint = artifact.capability.provenance.input_fingerprint;
+    const validated = fingerprintParams(validation.params);
+    const reusedParams = fingerprint
+      ? Object.keys(validated).filter((name) => fingerprint[name] === validated[name])
+      : [];
+    // Replaying the discovery inputs re-runs the run we already have. Only a
+    // different invocation shows the recording is a capability and not a
+    // transcript of one member's data.
+    if (fingerprint && reusedParams.length === Object.keys(validated).length) {
+      throw new Error("Validation replayed the discovery inputs; approval needs a different invocation.");
+    }
     const approved: CapabilityArtifact = {
       ...artifact,
       capability: {
         ...artifact.capability,
         status: "approved",
-        provenance: { ...artifact.capability.provenance, approved_by: approvedBy, approved_at: now.toISOString() }
+        provenance: {
+          ...artifact.capability.provenance,
+          approved_by: approvedBy,
+          approved_at: now.toISOString(),
+          validation: {
+            run: validation.run,
+            validated_at: now.toISOString(),
+            outcome: "success",
+            reused_params: reusedParams,
+            matched_tiers: validation.matchedTiers
+          }
+        }
       }
     };
     await this.write(approved);

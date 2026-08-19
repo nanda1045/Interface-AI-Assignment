@@ -15,6 +15,7 @@ import { installHumanRecorder } from "./control/human-recorder.js";
 import { createRunId, RunLogger } from "./evidence/run-logger.js";
 import { PolicyEngine } from "./policy/engine.js";
 import { replay } from "./replay/engine.js";
+import type { ReplayResult } from "./replay/result.js";
 import { WebSurface } from "./surface/web-playwright.js";
 
 function chooseClient(provider: "openai" | "anthropic"): LLMClient {
@@ -32,6 +33,59 @@ function parseAssignments(values: string[]): Record<string, string> {
     if (separator <= 0) throw new Error(`Expected name=value, received: ${assignment}`);
     return [assignment.slice(0, separator), assignment.slice(separator + 1)];
   }));
+}
+
+interface ReplayRunOptions {
+  reference: string;
+  params: Record<string, string>;
+  policy: string;
+  artifactRoot: string;
+  runRoot: string;
+  runId: string;
+  headless: boolean;
+  mockAuth: boolean;
+  overlay?: string;
+  chaos?: string;
+  handoff?: boolean;
+  consolePort?: string;
+  confirmMutations?: boolean;
+}
+
+// Shared by `replay` and by the validation replay behind `approve`, so approval
+// is earned through the same execution path a caller would use in production.
+async function runReplay(options: ReplayRunOptions): Promise<{ result: ReplayResult; runId: string }> {
+  const store = new ArtifactStore(options.artifactRoot);
+  let artifact = await store.load(options.reference);
+  if (options.overlay) artifact = applyOverlay(artifact, await loadOverlay(options.overlay));
+  if (options.handoff && options.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
+  const browser = await chromium.launch({ headless: options.headless });
+  const context = await browser.newContext();
+  const entry = new URL(artifact.entry.url);
+  if (options.mockAuth) {
+    if (!["http://localhost:4478", "http://localhost:4479"].includes(entry.origin)) throw new Error("--mock-auth is restricted to the fictional local CorePoint app.");
+    await context.addCookies([{ name: "cp_session", value: `teller:${entry.port === "4479" ? "b" : "a"}`, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
+  }
+  if (options.chaos) await context.addCookies([{ name: "cp_chaos", value: options.chaos, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
+  const page = await context.newPage();
+  const logger = new RunLogger(options.runId, options.runRoot);
+  await logger.initialize();
+  const controller = options.handoff ? new RunController(logger) : undefined;
+  const surface = new WebSurface(page, { browser, context, ...(controller ? { canAgentAct: () => controller.lease.agentCanAct() } : {}) });
+  const consoleServer = controller ? await startConsole(controller, Number(options.consolePort ?? 4590)) : undefined;
+  if (controller) {
+    await installHumanRecorder(page, controller, logger);
+    console.error(`Operator console: http://127.0.0.1:${options.consolePort ?? 4590}`);
+  }
+  try {
+    const result = await replay({
+      artifact, params: options.params, surface, policy: await PolicyEngine.fromFile(options.policy),
+      logger, confirmMutations: options.confirmMutations ?? false, ...(controller ? { handoff: controller } : {})
+    });
+    return { result, runId: options.runId };
+  } finally {
+    if (consoleServer) await new Promise<void>((resolve, reject) => consoleServer.close((error) => error ? reject(error) : resolve()));
+    await surface.close();
+  }
 }
 
 const program = new Command();
@@ -109,9 +163,34 @@ program.command("discover")
 program.command("approve")
   .argument("<reference>", "capability@version")
   .requiredOption("--by <reviewer>", "reviewer identity recorded in provenance")
-  .action(async (reference: string, raw: { by: string }) => {
-    const artifact = await new ArtifactStore().approve(reference, raw.by);
-    console.log(JSON.stringify({ id: artifact.capability.id, version: artifact.capability.version, status: artifact.capability.status, approvedBy: artifact.capability.provenance.approved_by }, null, 2));
+  // No default value, so commander enforces the flag rather than launching a
+  // browser and failing the replay on missing parameters.
+  .requiredOption("--param <name=value>", "validation parameter; must differ from the discovery invocation", (value, previous: string[] = []) => [...previous, value])
+  .option("--policy <path>", "policy YAML", "policies/default.yaml")
+  .option("--artifact-root <path>", "artifact directory", "artifacts")
+  .option("--overlay <path>", "tenant overlay JSON")
+  .option("--headless", "run the validation replay without a visible browser", false)
+  .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
+  .option("--run-root <path>", "run evidence directory", "runs")
+  .action(async (reference: string, raw: { by: string; param: string[]; policy: string; artifactRoot: string; overlay?: string; headless: boolean; mockAuth: boolean; runRoot: string }) => {
+    const store = new ArtifactStore(raw.artifactRoot);
+    const params = parseAssignments(raw.param);
+    // Approval is earned by a replay that actually ran, so the same execution
+    // path a caller would use has to succeed here first. A mutating capability
+    // really does perform its mutation, so validate it against test data.
+    const validation = await runReplay({
+      reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, overlay: raw.overlay,
+      headless: raw.headless, mockAuth: raw.mockAuth, runRoot: raw.runRoot, runId: createRunId("replay"),
+      confirmMutations: true
+    });
+    if (validation.result.status !== "success") {
+      throw new Error(`Validation replay ended as ${validation.result.status}, so ${reference} stays a draft. Evidence: ${validation.result.evidence}`);
+    }
+    const artifact = await store.approve(reference, raw.by, { run: validation.runId, params, matchedTiers: validation.result.stability.matched_tiers });
+    console.log(JSON.stringify({
+      id: artifact.capability.id, version: artifact.capability.version, status: artifact.capability.status,
+      approvedBy: artifact.capability.provenance.approved_by, validation: artifact.capability.provenance.validation
+    }, null, 2));
   });
 
 program.command("replay")
@@ -129,36 +208,22 @@ program.command("replay")
   .option("--run-root <path>", "run evidence directory", "runs")
   .option("--run-id <id>", "explicit run id (useful for reproducible evidence)")
   .action(async (reference: string, raw: { param: string[]; policy: string; artifactRoot: string; overlay?: string; chaos?: string; headless: boolean; confirmMutations: boolean; mockAuth: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
-    const store = new ArtifactStore(raw.artifactRoot);
-    let artifact = await store.load(reference);
-    if (raw.overlay) artifact = applyOverlay(artifact, await loadOverlay(raw.overlay));
-    const browser = await chromium.launch({ headless: raw.headless });
-    const context = await browser.newContext();
-    const entry = new URL(artifact.entry.url);
-    if (raw.mockAuth) {
-      if (!["http://localhost:4478", "http://localhost:4479"].includes(entry.origin)) throw new Error("--mock-auth is restricted to the fictional local CorePoint app.");
-      await context.addCookies([{ name: "cp_session", value: `teller:${entry.port === "4479" ? "b" : "a"}`, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
-    }
-    if (raw.chaos) await context.addCookies([{ name: "cp_chaos", value: raw.chaos, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
-    if (raw.handoff && raw.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
-    const page = await context.newPage();
-    const logger = new RunLogger(raw.runId ?? createRunId("replay"), raw.runRoot);
-    await logger.initialize();
-    const controller = raw.handoff ? new RunController(logger) : undefined;
-    const surface = new WebSurface(page, { browser, context, ...(controller ? { canAgentAct: () => controller.lease.agentCanAct() } : {}) });
-    const consoleServer = controller ? await startConsole(controller, Number(raw.consolePort)) : undefined;
-    if (controller) {
-      await installHumanRecorder(page, controller, logger);
-      console.error(`Operator console: http://127.0.0.1:${raw.consolePort}`);
-    }
-    try {
-      const result = await replay({ artifact, params: parseAssignments(raw.param), surface, policy: await PolicyEngine.fromFile(raw.policy), logger, confirmMutations: raw.confirmMutations, ...(controller ? { handoff: controller } : {}) });
-      console.log(JSON.stringify(result, null, 2));
-      if (result.status === "failure") process.exitCode = 1;
-    } finally {
-      if (consoleServer) await new Promise<void>((resolve, reject) => consoleServer.close((error) => error ? reject(error) : resolve()));
-      await surface.close();
-    }
+    const { result } = await runReplay({
+      reference, params: parseAssignments(raw.param), policy: raw.policy, artifactRoot: raw.artifactRoot,
+      overlay: raw.overlay, chaos: raw.chaos, headless: raw.headless, confirmMutations: raw.confirmMutations,
+      mockAuth: raw.mockAuth, handoff: raw.handoff, consolePort: raw.consolePort, runRoot: raw.runRoot,
+      runId: raw.runId ?? createRunId("replay")
+    });
+    console.log(JSON.stringify(result, null, 2));
+    if (result.status === "failure") process.exitCode = 1;
   });
 
-await program.parseAsync();
+// A refused approval or a bad flag is an ordinary outcome of running this tool,
+// not a crash. Operators get the sentence that matters and a non-zero exit; the
+// full detail is already in the run's evidence directory.
+try {
+  await program.parseAsync();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+}

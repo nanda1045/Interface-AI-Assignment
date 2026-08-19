@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { DiscoveryResult, RecordedStep } from "../agent/loop.js";
 import { redactString } from "../policy/redact.js";
 import type { AbstractAction, LocatorBundle, LocatorStrategy, TargetSpec } from "../surface/types.js";
@@ -24,6 +25,14 @@ export interface DistillOptions {
 // Values shorter than this would match almost any serialized locator and blank
 // an entire ladder, so they are ignored rather than treated as run data.
 const minimumTaintedLength = 3;
+
+// Approval has to show it exercised different inputs from discovery, and the
+// artifact must not carry the inputs themselves, so only the hashes travel.
+export function fingerprintParams(params: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(params).map(([name, value]) => [name, createHash("sha256").update(value).digest("hex").slice(0, 16)])
+  );
+}
 
 function containsAny(haystack: string, needles: readonly string[]): boolean {
   return needles.some((needle) => needle.length >= minimumTaintedLength && haystack.includes(needle));
@@ -143,7 +152,15 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
       app: { id: "corepoint-teller", vendor: "CorePoint Systems", ui_version_range: ">=3.1 <4" },
       risk: options.risk ?? "read_only",
       status: "draft",
-      provenance: { discovered_by: options.model, discovery_run: options.runId, recorded_at: (options.recordedAt ?? new Date()).toISOString(), approved_by: null, approved_at: null }
+      provenance: {
+        discovered_by: options.model,
+        discovery_run: options.runId,
+        recorded_at: (options.recordedAt ?? new Date()).toISOString(),
+        approved_by: null,
+        approved_at: null,
+        input_fingerprint: fingerprintParams(options.params),
+        validation: null
+      }
     },
     inputs: options.inputs,
     outputs: options.outputs,

@@ -82,7 +82,18 @@ export const capabilityArtifactSchema = strict({
       discovery_run: z.string(),
       recorded_at: z.string().datetime(),
       approved_by: z.string().nullable(),
-      approved_at: z.string().datetime().nullable()
+      approved_at: z.string().datetime().nullable(),
+      // Hashes rather than values: approval has to prove it exercised different
+      // inputs from discovery without putting those inputs back in the file.
+      input_fingerprint: z.record(z.string(), z.string()).optional(),
+      // The evidence that admitted this capability. Absent while it is a draft.
+      validation: strict({
+        run: z.string(),
+        validated_at: z.string().datetime(),
+        outcome: z.literal("success"),
+        reused_params: z.array(z.string()),
+        matched_tiers: z.record(z.string(), z.number())
+      }).nullable().optional()
     })
   }),
   inputs: objectContractSchema,
