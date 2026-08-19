@@ -13,6 +13,8 @@ import { bumpVersion } from "./artifact/versioning.js";
 import { startConsole } from "./control/console-server.js";
 import { RunController } from "./control/controller.js";
 import { installHumanRecorder } from "./control/human-recorder.js";
+import { mutationById, uiMutations } from "./eval/mutations.js";
+import { formatStressReport, scoreStress, type StressRow } from "./eval/stress.js";
 import { createRunId, RunLogger } from "./evidence/run-logger.js";
 import { PolicyEngine } from "./policy/engine.js";
 import { replay } from "./replay/engine.js";
@@ -50,6 +52,9 @@ interface ReplayRunOptions {
   handoff?: boolean;
   consolePort?: string;
   confirmMutations?: boolean;
+  /** Injected before the application's own scripts, to measure what the locator
+   *  ladder survives. Absent for every ordinary run. */
+  mutationScript?: string;
 }
 
 // Shared by `replay` and by the validation replay behind `approve`, so approval
@@ -68,6 +73,7 @@ async function runReplay(options: ReplayRunOptions): Promise<{ result: ReplayRes
   }
   if (options.chaos) await context.addCookies([{ name: "cp_chaos", value: options.chaos, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
   const page = await context.newPage();
+  if (options.mutationScript) await page.addInitScript({ content: options.mutationScript });
   const logger = new RunLogger(options.runId, options.runRoot);
   await logger.initialize();
   const controller = options.handoff ? new RunController(logger) : undefined;
@@ -228,6 +234,32 @@ program.command("replay")
     });
     console.log(JSON.stringify(result, null, 2));
     if (result.status === "failure") process.exitCode = 1;
+  });
+
+program.command("stress")
+  .description("Replay a capability under injected UI changes and report what the locator ladder survives.")
+  .argument("<reference>", "capability@version")
+  .requiredOption("--param <name=value>", "capability parameter", (value, previous: string[] = []) => [...previous, value])
+  .requiredOption("--expect <name=value>", "output the replay must return; a run that succeeds with the wrong value has not survived", (value, previous: string[] = []) => [...previous, value])
+  .option("--mutations <ids>", "comma-separated mutation ids; defaults to all")
+  .option("--policy <path>", "policy YAML", "policies/default.yaml")
+  .option("--artifact-root <path>", "artifact directory", "artifacts")
+  .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
+  .option("--run-root <path>", "run evidence directory", "runs")
+  .action(async (reference: string, raw: { param: string[]; expect: string[]; mutations?: string; policy: string; artifactRoot: string; mockAuth: boolean; runRoot: string }) => {
+    const params = parseAssignments(raw.param);
+    const expected = parseAssignments(raw.expect);
+    const chosen = raw.mutations ? raw.mutations.split(",").map((id) => mutationById(id.trim())) : uiMutations;
+    const rows: StressRow[] = [];
+    for (const mutation of chosen) {
+      const { result } = await runReplay({
+        reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, headless: true,
+        mockAuth: raw.mockAuth, runRoot: raw.runRoot, runId: `stress_${mutation.id}`,
+        ...(mutation.script ? { mutationScript: mutation.script } : {})
+      });
+      rows.push(scoreStress(mutation, result, expected));
+    }
+    console.log(formatStressReport(rows));
   });
 
 // A refused approval or a bad flag is an ordinary outcome of running this tool,
