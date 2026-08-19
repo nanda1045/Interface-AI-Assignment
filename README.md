@@ -200,12 +200,28 @@ The suite covers the live hostile iframe surface, locator ladders, schema valida
 - `src/control/`: control lease, intervention queue, operator console, and human recorder
 - `src/surface/`: browser-independent interface plus frame-aware Playwright implementation
 - `src/policy/`: configurable allowlist, risk checks, and redaction
+- `src/eval/`: injected UI mutations and the scoring behind `stress`
 - `apps/corepoint/`: fictional hostile target and deterministic chaos injection
 - `artifacts/`: reviewed capability contracts and Tenant B overlay
 - `evidence/`: committed discovery, replay, recovery, failure, handoff, and tenant examples
 - `REPORT.md`: design decisions, trade-offs, limitations, and cuts
+- `CHANGELOG.md`: what changed since submission, and why
 
 See [evidence/README.md](evidence/README.md) for the committed evidence matrix.
+
+## Measuring locator robustness
+
+The claim that a ranked ladder survives UI change is checked rather than asserted. `stress` replays a capability under UI changes injected into the browser — restyling, extended wording, replaced wording, rewritten ids, an inserted table row, a layout wrapper, and a compound — and reports which strategy kind carried each run.
+
+```bash
+npm run cli -- stress lookup_member_savings_balance@1.1.0 \
+  --param member_id=8832 \
+  --expect member_name="Sam Example" \
+  --expect savings_balance='$3,109.08' \
+  --mock-auth
+```
+
+`--expect` is required, not optional: a run that completes having read the wrong cell has not survived, and that is the failure this system is least able to notice on its own. Mutations are injected into the page rather than built into the mock app, so the harness works against any target and the application under test stays the one the capability was recorded against.
 
 ## Troubleshooting
 
