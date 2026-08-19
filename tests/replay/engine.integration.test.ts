@@ -84,6 +84,11 @@ describe("deterministic replay against the hostile live app", () => {
   it("returns success with output for a different invocation value", async () => {
     const result = await execute("8832");
     expect(result).toMatchObject({ status: "success", outputs: { savings_balance: "$3,109.08" } });
+    // Which kind of strategy matched is comparable between steps and between
+    // runs; the tier number beside it is only a position in one step's ladder.
+    if (result.status !== "success") throw new Error("expected a successful replay");
+    expect(Object.keys(result.stability.matched_strategies).length).toBeGreaterThan(0);
+    expect(Object.values(result.stability.matched_strategies).reduce((a, b) => a + b, 0)).toBe(result.stability.resolutions);
     const log = await readFile(path.join(temporaryRoot, "replay_8832_normal", "log.jsonl"), "utf8");
     expect(log).not.toContain("8832");
     expect(log).not.toContain("$3,109.08");

@@ -68,6 +68,8 @@ function artifactPolicyViolation(artifact: CapabilityArtifact, action: AbstractA
 function recordTier(stats: TierStats, step: string, resolution: ResolvedElement): void {
   stats.resolutions += 1;
   stats.matched_tiers[String(resolution.tier)] = (stats.matched_tiers[String(resolution.tier)] ?? 0) + 1;
+  const kind = resolution.matchedStrategy.kind;
+  stats.matched_strategies[kind] = (stats.matched_strategies[kind] ?? 0) + 1;
   if (resolution.tier > 1 && !stats.rescued_steps.includes(step)) stats.rescued_steps.push(step);
 }
 
@@ -98,7 +100,7 @@ async function observeAfterAction(surface: Surface, priorHash: string, timeoutMs
 
 export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   const { artifact, params, surface, policy, logger } = options;
-  const stats: TierStats = { resolutions: 0, matched_tiers: {}, rescued_steps: [] };
+  const stats: TierStats = { resolutions: 0, matched_tiers: {}, matched_strategies: {}, rescued_steps: [] };
   const recoveryAttempts = new Map<string, number>();
   const deadline = Date.now() + Math.min(artifact.policy.max_duration_ms, policy.config.max_duration_ms);
   let currentStep = "entry";

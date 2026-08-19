@@ -11,7 +11,13 @@ export type FailureClass =
 
 export interface TierStats {
   resolutions: number;
+  /** Keyed by position in that step's ladder. A step that captured four
+   *  strategies calls geometry "4"; one that captured seven calls a healthy
+   *  label match "4". Useful per step, meaningless once aggregated. */
   matched_tiers: Record<string, number>;
+  /** Keyed by strategy kind, which is comparable across steps and across runs.
+   *  This is the signal to watch for drift. */
+  matched_strategies: Record<string, number>;
   rescued_steps: string[];
 }
 
