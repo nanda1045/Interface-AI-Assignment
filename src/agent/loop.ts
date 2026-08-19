@@ -146,7 +146,7 @@ export async function runDiscovery(options: {
   async function humanUnblocked(step: number, observation: Observation, reason: string, requestedAction: string): Promise<boolean> {
     const handoff = options.handoff;
     if (!handoff) return false;
-    await handoff.request({
+    const request = await handoff.request({
       runId: logger.runId,
       capability: "discovery",
       goal,
@@ -157,6 +157,10 @@ export async function runDiscovery(options: {
       ...(observation.screenshot ? { screenshot: observation.screenshot } : {}),
       recentEvents: [{ url: observation.url, title: observation.title, stateHash: observation.stateHash }]
     });
+    // An expired request leaves the lease aborted, so there is nothing to resume.
+    // Reporting it as unresolved lets the run finish normally, which matters here
+    // because the retrospective redaction pass only runs on a terminal result.
+    if (request.status === "aborted") return false;
     await handoff.resume();
     hashVisits.clear();
     duplicateOutputMarks = 0;

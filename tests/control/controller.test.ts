@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,5 +39,18 @@ describe("control transfer", () => {
     await expect(pending).resolves.toMatchObject({ status: "handed_back", operator: "supervisor@example.test" });
     await controller.resumeAgent();
     expect(controller.summary()).toEqual({ count: 1, requestIds: [request.id] });
+  });
+
+  it("abandons an intervention nobody answers instead of leaving the run hanging", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-control-"));
+    roots.push(root);
+    const logger = new RunLogger("run_expired", root);
+    await logger.initialize();
+    const controller = new RunController(logger, 25);
+    const request = await controller.request({ runId: "run_expired", capability: "open_sub_account@1.0.0", goal: "Open account", step: "s5", intent: "Confirm account", reason: "Supervisor override required", requestedAction: "Enter a supervisor code" });
+    expect(request.status).toBe("aborted");
+    expect(controller.lease.current()).toMatchObject({ phase: "aborted", holder: null });
+    const log = await readFile(path.join(root, "run_expired", "log.jsonl"), "utf8");
+    expect(log).toContain("\"type\":\"stopped\"");
   });
 });

@@ -143,6 +143,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       if (preGlobal) {
         if (preGlobal.class !== "session_lost" || !options.handoff) return fail(preGlobal.class, "An authenticated, healthy application screen.", preGlobal.observed);
         const resume = await requestHandoff(step, observation, preGlobal.observed, "Re-authenticate in the live browser session.");
+        if (resume === "timed_out") return fail("timeout", "A human operator to take control of the paused run.", "The intervention request expired with no operator.");
         if (resume === "checkpoint") break stepsLoop;
         if (resume === "retry") { retryCurrentStep = true; continue; }
         if (resume === "completed") break;
@@ -154,6 +155,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       const preEscalation = detectEscalation(observation);
       if (preEscalation && options.handoff) {
         const resume = await requestHandoff(step, observation, preEscalation.reason, preEscalation.requestedAction);
+        if (resume === "timed_out") return fail("timeout", "A human operator to take control of the paused run.", "The intervention request expired with no operator.");
         if (resume === "checkpoint") break stepsLoop;
         if (resume === "retry") { retryCurrentStep = true; continue; }
         if (resume === "completed") break;
@@ -186,6 +188,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       if (global) {
         if (global.class !== "session_lost" || !options.handoff) return fail(global.class, "A healthy application screen after the action.", global.observed);
         const resume = await requestHandoff(step, observation, global.observed, "Re-authenticate in the live browser session.");
+        if (resume === "timed_out") return fail("timeout", "A human operator to take control of the paused run.", "The intervention request expired with no operator.");
         if (resume === "checkpoint") break stepsLoop;
         if (resume === "retry") { retryCurrentStep = true; continue; }
         if (resume === "completed") break;
@@ -197,6 +200,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       const escalation = detectEscalation(observation);
       if (escalation && options.handoff) {
         const resume = await requestHandoff(step, observation, escalation.reason, escalation.requestedAction);
+        if (resume === "timed_out") return fail("timeout", "A human operator to take control of the paused run.", "The intervention request expired with no operator.");
         if (resume === "checkpoint") break stepsLoop;
         if (resume === "retry") { retryCurrentStep = true; continue; }
         if (resume === "completed") break;
@@ -287,12 +291,12 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     observation: Observation,
     reason: string,
     requestedAction: string
-  ): Promise<"completed" | "retry" | "checkpoint" | "failed"> {
+  ): Promise<"completed" | "retry" | "checkpoint" | "failed" | "timed_out"> {
     const handoff = options.handoff;
     if (!handoff) return "failed";
     let screenshot: string | undefined;
     if (!sensitiveRun) screenshot = (await surface.observe({ screenshot: true })).screenshot;
-    await handoff.request({
+    const request = await handoff.request({
       runId: logger.runId,
       capability: `${artifact.capability.id}@${artifact.capability.version}`,
       goal: artifact.capability.title,
@@ -303,6 +307,9 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       ...(screenshot ? { screenshot } : {}),
       recentEvents: [{ url: observation.url, title: observation.title, stateHash: observation.stateHash }]
     });
+    // An expired request leaves the lease aborted, so there is nothing to resume
+    // and no state to re-derive from - only a terminal result to report.
+    if (request.status === "aborted") return "timed_out";
     const resumedObservation = await surface.observe();
     let decision: "completed" | "retry" | "checkpoint" | "failed" = "failed";
     if (await allPredicatesMatch(artifact.checkpoint.assert, resumedObservation, surface)) decision = "checkpoint";

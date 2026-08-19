@@ -21,7 +21,19 @@ export class RunController implements HandoffCoordinator {
     this.lease.pause(context.reason);
     await this.logger.event({ type: "intervention_requested", request });
     await this.logger.event({ type: "lease_change", state: this.lease.current() });
-    await this.lease.waitFor("resuming", this.timeoutMs);
+    try {
+      await this.lease.waitFor("resuming", this.timeoutMs);
+    } catch {
+      // Nobody came. That is an expected outcome of asking for help rather than
+      // an exception, so the caller gets a terminal state it can report instead
+      // of an unhandled rejection - and the lease is not left paused forever.
+      const abandoned: InterventionRequest = { ...request, status: "aborted" };
+      this.requests.set(id, abandoned);
+      this.lease.abort(`No operator took control within ${this.timeoutMs}ms.`);
+      await this.logger.event({ type: "lease_change", state: this.lease.current() });
+      await this.logger.event({ type: "stopped", reason: `Intervention ${id} expired with no operator.` });
+      return abandoned;
+    }
     const completed = this.requests.get(id);
     if (!completed) throw new Error(`Intervention ${id} disappeared.`);
     return completed;
