@@ -11,17 +11,25 @@
       "ui_version_range": ">=3.1 <4"
     },
     "risk": "read_only",
-    "status": "draft",
+    "status": "approved",
     "provenance": {
       "discovered_by": "claude-sonnet-4-6",
       "discovery_run": "disc_rediscovery",
       "recorded_at": "2026-08-19T18:48:30.155Z",
-      "approved_by": null,
-      "approved_at": null,
+      "approved_by": "reviewer@interface.test",
+      "approved_at": "2026-08-19T18:49:30.072Z",
       "input_fingerprint": {
         "member_id": "b1ded99722cf8de8"
       },
-      "validation": null
+      "validation": {
+        "run": "replay_20260819T184929Z",
+        "validated_at": "2026-08-19T18:49:30.072Z",
+        "outcome": "success",
+        "reused_params": [],
+        "matched_tiers": {
+          "1": 5
+        }
+      }
     }
   },
   "inputs": {

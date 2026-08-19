@@ -16,6 +16,8 @@ export interface DistillOptions {
   outputs: ObjectContract;
   risk?: "read_only" | "mutating" | "irreversible";
   recordedAt?: Date;
+  /** Defaults to a first recording; a re-record supplies the next version. */
+  version?: string;
   /** Values the run marked sensitive. The artifact is scrubbed against the same
    *  list the evidence logger uses, so a capability cannot retain data the run
    *  already decided was not safe to persist. */
@@ -146,7 +148,7 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
     schema_version: "1.0",
     capability: {
       id: options.id,
-      version: "1.0.0",
+      version: options.version ?? "1.0.0",
       title: options.title,
       description: options.description,
       app: { id: "corepoint-teller", vendor: "CorePoint Systems", ui_version_range: ">=3.1 <4" },

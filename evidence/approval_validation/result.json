@@ -4,11 +4,11 @@
     "member_name": "«redacted»",
     "savings_balance": "«redacted»"
   },
-  "evidence": "/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/runs/ev_recovery",
+  "evidence": "/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/runs/replay_20260819T184929Z",
   "stability": {
-    "resolutions": 6,
+    "resolutions": 5,
     "matched_tiers": {
-      "1": 6
+      "1": 5
     },
     "rescued_steps": []
   }

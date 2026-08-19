@@ -1,0 +1,10 @@
+{"type":"run_started","goal":"Look up member savings balance","target":"http://localhost:4478/desk","model":"deterministic-replay","at":"2026-08-19T18:49:29.834Z","runId":"replay_20260819T184929Z"}
+{"type":"policy_check","step":0,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-19T18:49:29.835Z","runId":"replay_20260819T184929Z"}
+{"type":"action","step":0,"action":{"kind":"navigate","url":"http://localhost:4478/desk"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-19T18:49:29.847Z","runId":"replay_20260819T184929Z"}
+{"type":"policy_check","step":1,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-19T18:49:29.895Z","runId":"replay_20260819T184929Z"}
+{"type":"action","step":1,"action":{"kind":"type","ref":"r1","text":"«redacted»"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-19T18:49:29.910Z","runId":"replay_20260819T184929Z"}
+{"type":"policy_check","step":2,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-19T18:49:29.932Z","runId":"replay_20260819T184929Z"}
+{"type":"action","step":2,"action":{"kind":"click","ref":"r3"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-19T18:49:29.956Z","runId":"replay_20260819T184929Z"}
+{"type":"policy_check","step":3,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-19T18:49:29.993Z","runId":"replay_20260819T184929Z"}
+{"type":"action","step":3,"action":{"kind":"click","ref":"r4"},"resultUrl":"http://localhost:4478/desk","at":"2026-08-19T18:49:30.019Z","runId":"replay_20260819T184929Z"}
+{"type":"result","status":"success","detail":{"status":"success","outputs":{"member_name":"«redacted»","savings_balance":"«redacted»"},"evidence":"/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/runs/replay_20260819T184929Z","stability":{"resolutions":5,"matched_tiers":{"1":5},"rescued_steps":[]}},"at":"2026-08-19T18:49:30.055Z","runId":"replay_20260819T184929Z"}

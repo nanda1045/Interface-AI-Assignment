@@ -47,7 +47,7 @@ npm run app
 Run the committed discovered capability in terminal 2 with a member different from the discovery input:
 
 ```bash
-npm run cli -- replay lookup_member_savings_balance@1.0.0 \
+npm run cli -- replay lookup_member_savings_balance@1.1.0 \
   --param member_id=8832 \
   --mock-auth
 ```
@@ -84,7 +84,29 @@ npm run cli -- replay manual_lookup_member_savings_balance@1.0.0 \
   --run-root runs
 ```
 
-The declared `--output` names form the discovery completion contract: the runtime stops after the model visibly marks each required output. `--overwrite-artifact` is available only when intentionally replacing an existing version after a successful run. Adding `--handoff` (headed browser only) lets a stuck discovery pause into the same operator console used for replay handoff instead of ending the run.
+The declared `--output` names form the discovery completion contract: the runtime stops after the model visibly marks each required output. Adding `--handoff` (headed browser only) lets a stuck discovery pause into the same operator console used for replay handoff instead of ending the run.
+
+Versions are immutable, so re-recording an existing capability claims the next one with `--bump patch|minor|major` rather than replacing the reviewed artifact it supersedes. `--overwrite-artifact` remains available for intentionally replacing a version in place.
+
+## Approving a capability
+
+A discovered artifact is a `draft`. Approval is earned rather than declared: `approve` runs a real validation replay through the same path a caller uses, and only writes the approved status if it succeeds.
+
+```bash
+npm run cli -- approve lookup_member_savings_balance@1.1.0 \
+  --by "reviewer@example.test" \
+  --param member_id=8832 \
+  --mock-auth
+```
+
+Two things make that evidence mean something, and both refuse rather than warn:
+
+- **The invocation must differ from discovery.** Replaying the recorded inputs only re-runs the run we already have; a different member is what shows the recording is a capability rather than a transcript of one member's data. The artifact stores a per-parameter fingerprint, so this is checked without the artifact ever holding an invocation value.
+- **The approver cannot be the identity that recorded the capability.**
+
+The outcome is written into `capability.provenance.validation` — which run, when, which parameters were reused, and which locator tiers matched — so a reviewer can see how thin or solid the evidence was.
+
+A mutating capability genuinely performs its mutation during validation, so approve those against test data.
 
 ## Manual test checklist
 
@@ -93,7 +115,7 @@ Keep `npm run app` running, then execute these one at a time. They write local e
 ### 1. Successful deterministic replay
 
 ```bash
-npm run cli -- replay lookup_member_savings_balance@1.0.0 \
+npm run cli -- replay lookup_member_savings_balance@1.1.0 \
   --param member_id=8832 --mock-auth --run-root runs --run-id manual_success
 ```
 
@@ -102,7 +124,7 @@ Expected: `status: "success"`, with a fictional member name and balance. The ter
 ### 2. Expected business outcome
 
 ```bash
-npm run cli -- replay lookup_member_savings_balance@1.0.0 \
+npm run cli -- replay lookup_member_savings_balance@1.1.0 \
   --param member_id=9999 --mock-auth --run-root runs --run-id manual_not_found
 ```
 
@@ -111,7 +133,7 @@ Expected: `status: "business_outcome"` and `code: "MEMBER_NOT_FOUND"`, not a fai
 ### 3. Recoverable session modal
 
 ```bash
-npm run cli -- replay lookup_member_savings_balance@1.0.0 \
+npm run cli -- replay lookup_member_savings_balance@1.1.0 \
   --param member_id=1001 --chaos session_timeout --mock-auth \
   --run-root runs --run-id manual_recovery
 ```
@@ -121,7 +143,7 @@ Expected: the replay dismisses the modal and succeeds. `runs/manual_recovery/log
 ### 4. Tenant B overlay
 
 ```bash
-npm run cli -- replay lookup_member_savings_balance@1.0.0 \
+npm run cli -- replay lookup_member_savings_balance@1.1.0 \
   --param member_id=1002 \
   --overlay artifacts/overrides/lookup_member_savings_balance@b.json \
   --mock-auth --run-root runs --run-id manual_tenant_b

@@ -89,6 +89,19 @@ export class ArtifactStore {
     return approved;
   }
 
+  // Versions are immutable, so re-recording a capability needs to know what the
+  // previous one was rather than overwriting it.
+  public async latestVersion(id: string): Promise<string | undefined> {
+    const pattern = new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}@(\\d+)\\.(\\d+)\\.(\\d+)\\.json$`);
+    return (await this.list())
+      .map((file) => pattern.exec(file))
+      .filter((match): match is RegExpExecArray => match !== null)
+      .sort((left, right) => left.slice(1, 4).reduce((order, part, index) => order || Number(part) - Number(right[index + 1]), 0))
+      .at(-1)
+      ?.slice(1, 4)
+      .join(".");
+  }
+
   public async list(): Promise<string[]> {
     try {
       return (await readdir(this.root)).filter((file) => file.endsWith(".json")).sort();

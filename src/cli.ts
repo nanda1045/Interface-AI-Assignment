@@ -9,6 +9,7 @@ import { OpenAIClient } from "./agent/llm/openai.js";
 import { distillDiscovery } from "./artifact/distill.js";
 import { applyOverlay, loadOverlay } from "./artifact/overlay.js";
 import { ArtifactStore } from "./artifact/store.js";
+import { bumpVersion } from "./artifact/versioning.js";
 import { startConsole } from "./control/console-server.js";
 import { RunController } from "./control/controller.js";
 import { installHumanRecorder } from "./control/human-recorder.js";
@@ -104,12 +105,13 @@ program.command("discover")
   .option("--param <name=value>", "bind a discovery value to an input parameter", (value, previous: string[]) => [...previous, value], [])
   .option("--output <name>", "declared output name; repeat for multiple outputs", (value, previous: string[]) => [...previous, value], [])
   .option("--artifact-root <path>", "artifact directory", "artifacts")
+  .option("--bump <level>", "re-record an existing capability as the next patch, minor or major version")
   .option("--overwrite-artifact", "replace an existing artifact after a successful discovery", false)
   .option("--handoff", "enable same-session human intervention when discovery is stuck", false)
   .option("--console-port <port>", "operator console port", "4590")
   .option("--run-root <path>", "run evidence directory", "runs")
   .option("--run-id <id>", "explicit run id (useful for reproducible evidence)")
-  .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; capabilityId?: string; title?: string; description?: string; param: string[]; output: string[]; artifactRoot: string; overwriteArtifact: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
+  .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; capabilityId?: string; title?: string; description?: string; param: string[]; output: string[]; artifactRoot: string; bump?: string; overwriteArtifact: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
     if (raw.provider !== "openai" && raw.provider !== "anthropic") throw new Error("--provider must be openai or anthropic.");
     if (raw.handoff && raw.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
     const browser = await chromium.launch({ headless: raw.headless });
@@ -135,6 +137,16 @@ program.command("discover")
       const result = await runDiscovery({ goal: raw.goal, target: raw.url, surface, policy, llm, logger, allowMutations: raw.allowMutations, expectedOutputs: raw.output, ...(controller ? { handoff: controller } : {}) });
       if (result.status === "success" && raw.capabilityId) {
         const params = parseAssignments(raw.param);
+        const store = new ArtifactStore(raw.artifactRoot);
+        // Versions are immutable, so a re-recording has to claim the next one
+        // rather than overwrite the reviewed artifact it supersedes.
+        let version: string | undefined;
+        if (raw.bump) {
+          if (raw.bump !== "patch" && raw.bump !== "minor" && raw.bump !== "major") throw new Error("--bump must be patch, minor or major.");
+          const previous = await store.latestVersion(raw.capabilityId);
+          if (!previous) throw new Error(`No existing ${raw.capabilityId} to bump; omit --bump to record the first version.`);
+          version = bumpVersion(previous, raw.bump);
+        }
         const artifact = distillDiscovery(result, {
           id: raw.capabilityId,
           title: raw.title ?? raw.capabilityId.replace(/_/g, " "),
@@ -143,11 +155,11 @@ program.command("discover")
           model: llm.model,
           runId: result.runId,
           params,
+          ...(version ? { version } : {}),
           sensitiveValues: logger.knownSensitiveValues(),
           inputs: { type: "object", required: Object.keys(params), properties: Object.fromEntries(Object.keys(params).map((name) => [name, { type: "string", sensitive: /member|account|ssn/i.test(name) }])) },
           outputs: { type: "object", required: Object.keys(result.outputs), properties: Object.fromEntries(Object.keys(result.outputs).map((name) => [name, { type: "string", ...(/member|name|balance|account|ssn/i.test(name) ? { sensitive: true } : {}), ...(name.includes("balance") ? { "x-format": "usd-currency" } : {}) }])) }
         });
-        const store = new ArtifactStore(raw.artifactRoot);
         const artifactPath = raw.overwriteArtifact ? await store.write(artifact) : await store.save(artifact);
         await logger.artifact(artifact);
         console.error(`Draft artifact saved to ${artifactPath}`);

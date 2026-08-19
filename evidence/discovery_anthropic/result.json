@@ -1,6 +1,6 @@
 {
   "status": "success",
-  "runId": "discovery_anthropic",
+  "runId": "disc_rediscovery",
   "steps": [
     {
       "step": 1,
@@ -9,10 +9,10 @@
         "kind": "type",
         "ref": "o1f1-4",
         "text": "«redacted»",
-        "sensitive": true
+        "sensitive": false
       },
       "locators": {
-        "capturedAt": "2026-08-13T19:31:45.526Z",
+        "capturedAt": "2026-08-19T18:48:14.218Z",
         "strategies": [
           {
             "kind": "label_proximity",
@@ -64,7 +64,7 @@
         "sensitive": false
       },
       "locators": {
-        "capturedAt": "2026-08-13T19:31:47.893Z",
+        "capturedAt": "2026-08-19T18:48:17.218Z",
         "strategies": [
           {
             "kind": "label_proximity",
@@ -108,13 +108,13 @@
     },
     {
       "step": 3,
-      "reasoning": "The member number «redacted» is already filled in the search box. I'll click Search to look up the member.",
+      "reasoning": "The member number «redacted» is already filled in the search box. I'll click Search to look up this member.",
       "action": {
         "kind": "click",
         "ref": "o3f1-7"
       },
       "locators": {
-        "capturedAt": "2026-08-13T19:31:50.201Z",
+        "capturedAt": "2026-08-19T18:48:20.392Z",
         "strategies": [
           {
             "kind": "role_name",
@@ -159,13 +159,13 @@
     },
     {
       "step": 4,
-      "reasoning": "I can see member «redacted» \"«redacted»\" in the search results. I need to open their member record to get the savings balance details.",
+      "reasoning": "Click \"Open Member\" to navigate to member «redacted»'s detail screen where I can read their name and savings balance.",
       "action": {
         "kind": "click",
         "ref": "o4f1-9"
       },
       "locators": {
-        "capturedAt": "2026-08-13T19:31:53.151Z",
+        "capturedAt": "2026-08-19T18:48:23.396Z",
         "strategies": [
           {
             "kind": "role_name",
@@ -198,7 +198,7 @@
   ],
   "outputs": {
     "member_name": {
-      "capturedAt": "2026-08-13T19:31:55.909Z",
+      "capturedAt": "2026-08-19T18:48:26.681Z",
       "strategies": [
         {
           "kind": "label_adjacent_cell",
@@ -217,7 +217,7 @@
       ]
     },
     "savings_balance": {
-      "capturedAt": "2026-08-13T19:31:58.487Z",
+      "capturedAt": "2026-08-19T18:48:30.146Z",
       "strategies": [
         {
           "kind": "label_adjacent_cell",
