@@ -44,6 +44,17 @@ describe("distillDiscovery", () => {
     expect(() => distillDiscovery(result, { ...options, params: { ...options.params, unused: "x" } })).toThrow(/never bound: unused/);
   });
 
+  it("permits only the actions the capability performs", () => {
+    const artifact = distillDiscovery(
+      runSteps(step({ kind: "type", ref: "e1", text: "4521", sensitive: true }), step({ kind: "click", ref: "e1" })),
+      options
+    );
+    // navigate for the entry, click for the recovery rule, type and click for the steps.
+    expect([...artifact.policy.allowed_actions].sort()).toEqual(["click", "navigate", "type"]);
+    expect(artifact.policy.allowed_actions).not.toContain("press");
+    expect(artifact.policy.allowed_actions).not.toContain("scroll");
+  });
+
   it("scrubs values the run marked sensitive out of the model's intent text", () => {
     const artifact = distillDiscovery(
       runWith({ reasoning: 'I can see member 4521 "Alex Testman" in the results.' }),

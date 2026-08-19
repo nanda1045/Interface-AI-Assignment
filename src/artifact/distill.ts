@@ -141,6 +141,20 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
     from: untaintedTarget(bundle, tainted, `extraction of ${output}`),
     parse: options.outputs.properties[output]?.["x-format"] === "usd-currency" ? "currency" as const : "text" as const
   }));
+  const recovery: CapabilityArtifact["recovery"] = [{
+    id: "dismiss_session_modal",
+    condition: { kind: "dialog_present", textPattern: "Session expiring" },
+    action: { kind: "click", target: { strategies: [{ kind: "role_name", role: "button", name: "Continue", frame: "workarea", unique: true, confidence: 0.9 }] } },
+    max_attempts: 1
+  }];
+  // A capability is only permitted the actions it actually performs. Entry
+  // navigation and recovery clicks are driven by the engine rather than by a
+  // step, so they are permitted explicitly instead of being inferred away.
+  const allowedActions = [...new Set<CapabilityArtifact["policy"]["allowed_actions"][number]>([
+    "navigate",
+    ...steps.map((step) => step.action.kind),
+    ...recovery.map((rule) => rule.action.kind)
+  ])];
   const undeclared = extract.map((item) => item.output).filter((output) => !(output in options.outputs.properties));
   if (undeclared.length > 0) throw new Error(`Marked outputs are not declared in the output contract: ${undeclared.join(", ")}`);
   const origin = new URL(options.entryUrl).origin;
@@ -174,12 +188,7 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
       { code: "MEMBER_NOT_FOUND", at_steps: steps.map((step) => step.id), when: [{ kind: "text_visible", pattern: "No member found", frame: "workarea" }], returns: { found: false } },
       { code: "PERMISSION_DENIED", at_steps: steps.map((step) => step.id), when: [{ kind: "text_visible", pattern: "Access denied", frame: "workarea" }] }
     ],
-    recovery: [{
-      id: "dismiss_session_modal",
-      condition: { kind: "dialog_present", textPattern: "Session expiring" },
-      action: { kind: "click", target: { strategies: [{ kind: "role_name", role: "button", name: "Continue", frame: "workarea", unique: true, confidence: 0.9 }] } },
-      max_attempts: 1
-    }],
-    policy: { allowed_origins: [origin], allowed_actions: ["navigate", "click", "focus", "type", "select", "press", "scroll"], max_duration_ms: 120_000 }
+    recovery,
+    policy: { allowed_origins: [origin], allowed_actions: allowedActions, max_duration_ms: 120_000 }
   });
 }

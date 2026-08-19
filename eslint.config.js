@@ -17,10 +17,15 @@ export default tseslint.config(
   {
     // Replay is the model-free production path: it must never gain a runtime
     // dependency on the LLM layer. Type-only contracts remain allowed.
+    // It also drives the browser only through the Surface interface, so the
+    // seam that makes a second surface possible is enforced rather than assumed.
     files: ["src/replay/**/*.ts"],
     rules: {
       "@typescript-eslint/no-restricted-imports": ["error", {
-        patterns: [{ group: ["**/agent/**"], message: "Deterministic replay must not depend on the LLM layer.", allowTypeImports: true }]
+        patterns: [
+          { group: ["**/agent/**"], message: "Deterministic replay must not depend on the LLM layer.", allowTypeImports: true },
+          { group: ["playwright", "playwright-core"], message: "Replay talks to the Surface interface, never to a browser driver." }
+        ]
       }]
     }
   }
