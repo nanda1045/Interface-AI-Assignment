@@ -89,6 +89,7 @@ program.command("discover")
           model: llm.model,
           runId: result.runId,
           params,
+          sensitiveValues: logger.knownSensitiveValues(),
           inputs: { type: "object", required: Object.keys(params), properties: Object.fromEntries(Object.keys(params).map((name) => [name, { type: "string", sensitive: /member|account|ssn/i.test(name) }])) },
           outputs: { type: "object", required: Object.keys(result.outputs), properties: Object.fromEntries(Object.keys(result.outputs).map((name) => [name, { type: "string", ...(/member|name|balance|account|ssn/i.test(name) ? { sensitive: true } : {}), ...(name.includes("balance") ? { "x-format": "usd-currency" } : {}) }])) }
         });

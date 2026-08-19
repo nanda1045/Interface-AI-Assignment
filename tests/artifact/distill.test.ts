@@ -13,6 +13,25 @@ const options = {
   outputs: { type: "object" as const, required: ["savings_balance"], properties: { savings_balance: { type: "string" as const, "x-format": "usd-currency" } } }
 };
 
+const roleName = (name: string) => ({ kind: "role_name" as const, role: "button", name, frame: "workarea", unique: true as const, confidence: 0.9 });
+const bundle = (...strategies: { kind: string }[]) => ({ capturedAt: "2026-08-13T00:00:00.000Z", strategies }) as typeof locator;
+const runWith = (overrides: { reasoning?: string; locators?: typeof locator; outputs?: DiscoveryResult["outputs"] }): DiscoveryResult => ({
+  ...result,
+  outputs: overrides.outputs ?? result.outputs,
+  steps: [{
+    step: 1,
+    reasoning: overrides.reasoning ?? "Enter member",
+    action: { kind: "type", ref: "e1", text: "4521", sensitive: true },
+    locators: overrides.locators ?? locator,
+    beforeUrl: "http://localhost:4478/desk",
+    afterUrl: "http://localhost:4478/desk"
+  }]
+});
+
+const step = (action: DiscoveryResult["steps"][number]["action"], locators = locator): DiscoveryResult["steps"][number] =>
+  ({ step: 1, reasoning: "Work the form", action, locators, beforeUrl: "http://localhost:4478/desk", afterUrl: "http://localhost:4478/desk" });
+const runSteps = (...steps: DiscoveryResult["steps"]): DiscoveryResult => ({ ...result, steps });
+
 describe("distillDiscovery", () => {
   it("binds concrete recorded values into typed parameters", () => {
     const artifact = distillDiscovery(result, options);
@@ -23,5 +42,48 @@ describe("distillDiscovery", () => {
   it("fails loudly when a supplied parameter never binds", () => {
     expect(() => distillDiscovery(result, { ...options, params: { member_id: "9999" } })).toThrow(/Could not uniquely bind/);
     expect(() => distillDiscovery(result, { ...options, params: { ...options.params, unused: "x" } })).toThrow(/never bound: unused/);
+  });
+
+  it("scrubs values the run marked sensitive out of the model's intent text", () => {
+    const artifact = distillDiscovery(
+      runWith({ reasoning: 'I can see member 4521 "Alex Testman" in the results.' }),
+      { ...options, sensitiveValues: ["Alex Testman"] }
+    );
+    expect(artifact.steps[0]?.intent).toBe('I can see member {{member_id}} "«redacted»" in the results.');
+    expect(JSON.stringify(artifact)).not.toContain("Alex Testman");
+  });
+
+  it("drops locator strategies built from run-specific data but keeps the rest of the ladder", () => {
+    const artifact = distillDiscovery(
+      runWith({ locators: bundle(roleName("View account 4521-01"), locator.strategies[0]!) }),
+      options
+    );
+    expect(artifact.steps[0]?.target?.strategies).toHaveLength(1);
+    expect(artifact.steps[0]?.target?.strategies[0]?.kind).toBe("attr_css");
+    expect(JSON.stringify(artifact)).not.toContain("4521-01");
+  });
+
+  it("collapses a value the model re-entered into the same control", () => {
+    const artifact = distillDiscovery(
+      runSteps(step({ kind: "type", ref: "e1", text: "4521", sensitive: true }), step({ kind: "type", ref: "e1", text: "4521", sensitive: true })),
+      options
+    );
+    expect(artifact.steps).toHaveLength(1);
+    expect(artifact.steps[0]?.id).toBe("s1");
+  });
+
+  it("never collapses a repeated click, which may be doing work each time", () => {
+    const artifact = distillDiscovery(
+      runSteps(step({ kind: "type", ref: "e1", text: "4521", sensitive: true }), step({ kind: "click", ref: "e1" }), step({ kind: "click", ref: "e1" })),
+      options
+    );
+    expect(artifact.steps).toHaveLength(3);
+  });
+
+  it("refuses the artifact when run data emptied a ladder", () => {
+    expect(() => distillDiscovery(runWith({ locators: bundle(roleName("View account 4521-01")) }), options))
+      .toThrow(/step 1 was built from run-specific data/);
+    expect(() => distillDiscovery(runWith({ outputs: { savings_balance: bundle(roleName("Balance for Alex Testman")) } }), { ...options, sensitiveValues: ["Alex Testman"] }))
+      .toThrow(/extraction of savings_balance was built from run-specific data/);
   });
 });

@@ -20,6 +20,12 @@ export class RunLogger {
     if (value) this.sensitiveValues.add(value);
   }
 
+  // Distillation scrubs the artifact against the same list, so a capability
+  // cannot retain data this run already decided was unsafe to persist.
+  public knownSensitiveValues(): string[] {
+    return [...this.sensitiveValues];
+  }
+
   public async event(event: RunEvent): Promise<void> {
     const persisted = redactValue({ ...event, at: new Date().toISOString(), runId: this.runId }, [...this.sensitiveValues]);
     await appendFile(path.join(this.directory, "log.jsonl"), `${JSON.stringify(persisted)}\n`, "utf8");
