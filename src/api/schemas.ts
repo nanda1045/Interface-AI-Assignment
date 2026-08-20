@@ -38,7 +38,12 @@ export const runRequestSchema = z
     fault_injection: z.string().min(1).optional(),
     // A duplicate request carrying the same key maps to the same run instead of
     // launching a second one - so a retried transfer never posts twice.
-    idempotency_key: z.string().min(1).max(200).optional()
+    idempotency_key: z.string().min(1).max(200).optional(),
+    // Explicit acknowledgement that an operator is present to complete an
+    // irreversible action at its human boundary. It permits an irreversible run
+    // to start HEADED with handoff so the dashboard's own controls drive it -
+    // the unattended endpoint still refuses irreversible work without it.
+    attended: z.boolean().optional()
   })
   .strict();
 

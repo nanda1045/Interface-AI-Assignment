@@ -129,15 +129,17 @@ export function createApiApp(deps: ApiDependencies) {
       }
 
       const risk = artifact.capability.risk;
-      // An irreversible capability cannot be completed by this headless endpoint:
-      // its final step is performed by a human in an attended session. Say so
-      // plainly instead of enqueueing a run that can only fail at the boundary.
-      if (risk === "irreversible") {
+      // An irreversible capability runs only as an ATTENDED run: it starts
+      // headed with handoff so the machine walks to the boundary, pauses, and a
+      // human completes the final step from the dashboard's own controls. The
+      // unattended endpoint (no `attended` flag) still refuses it outright.
+      const attendedIrreversible = risk === "irreversible" && body.attended === true;
+      if (risk === "irreversible" && !body.attended) {
         response.status(409).json({
           error: "This capability is irreversible and pauses for a human operator to complete the final step.",
           risk, requires_human: true,
           capability: resolved.reference,
-          detail: "Run it through the attended operator-console handoff flow, not the unattended API run endpoint."
+          detail: "Start it as an attended run (attended: true) so an operator can complete it on the dashboard."
         });
         return;
       }
@@ -165,9 +167,12 @@ export function createApiApp(deps: ApiDependencies) {
             params: body.inputs,
             runId,
             runRoot,
-            headless: true,
+            // An attended irreversible run is headed with handoff so a person can
+            // complete the final step; every other run stays headless.
+            headless: !attendedIrreversible,
+            ...(attendedIrreversible ? { handoff: true } : {}),
             ...(body.auth ? { auth: body.auth } : {}),
-            ...(risk === "mutating" ? { confirmMutations: true } : {}),
+            ...(risk !== "read_only" ? { confirmMutations: true } : {}),
             ...(body.fault_injection ? { faultInjection: body.fault_injection } : {})
           });
           return { result: outcome.result, reference: outcome.reference };

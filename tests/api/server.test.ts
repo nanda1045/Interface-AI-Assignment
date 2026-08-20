@@ -140,6 +140,17 @@ describe("adaptation API", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("runs an irreversible capability as an attended, headed handoff run", async () => {
+    await boot();
+    const { status } = await post("/api/runs", { capability: "irr_cap", inputs: { member_id: "4521" }, attended: true });
+    expect(status).toBe(202);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Attended irreversible starts headed with handoff so a human completes it.
+    expect(calls[0]?.headless).toBe(false);
+    expect(calls[0]?.handoff).toBe(true);
+    expect(calls[0]?.confirmMutations).toBe(true);
+  });
+
   it("accepts fault_injection only in demo mode and passes it to the runner", async () => {
     await boot(false);
     expect((await post("/api/runs", { capability: "read_cap", inputs: { member_id: "4521" }, fault_injection: "timeout" })).status).toBe(403);

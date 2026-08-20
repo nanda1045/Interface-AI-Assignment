@@ -58,7 +58,10 @@ async function poll(){
   try{
     const [caps,runs,ints]=await Promise.all([j('/api/capabilities'),j('/api/runs'),j('/api/interventions')]);
     renderCatalog(caps.capabilities||[]);
-    renderRuns(runs.runs||[]);
+    // A run with a pending intervention is paused for a human right now, even if
+    // its stored state has not been rewritten - show that plainly.
+    const waiting=new Set((ints||[]).filter(i=>i.status==='waiting'||i.status==='human_control').map(i=>i.runId));
+    renderRuns(runs.runs||[], waiting);
     renderInterventions(ints||[]);
     if(selected) await renderDetail(selected);
   }catch(e){/* transient during a run; next tick recovers */}
@@ -69,9 +72,10 @@ function renderCatalog(list){
   $('catalog').innerHTML=list.map(c=>\`<div class="card"><div class="cap"><span class="name">\${esc(c.tool.name)}</span><span class="tag \${c.risk}">\${c.risk.replace('_',' ')}</span></div><div class="ref">\${esc(c.reference)}\${c.requires_human?' · needs human':''}</div></div>\`).join('')||'<div class="card muted">No approved capabilities.</div>';
 }
 
-function renderRuns(list){
-  const sig=JSON.stringify(list.map(r=>[r.runId,r.state]));if(sig===lastRunSig&&!selected)return;lastRunSig=sig;
-  $('runs').innerHTML=list.map(r=>\`<div class="card run \${r.runId===selected?'sel':''}" onclick="select('\${esc(r.runId)}')"><div class="cap"><span class="name">\${esc(r.capability||r.runId)}</span><span class="st \${r.state}">\${stateLabel(r.state)}</span></div><div class="ref">\${esc(r.type)} · \${esc(r.runId)}</div></div>\`).join('')||'<div class="card muted">No runs yet.</div>';
+function renderRuns(list,waiting){
+  waiting=waiting||new Set();
+  const sig=JSON.stringify(list.map(r=>[r.runId,r.state,waiting.has(r.runId)]));if(sig===lastRunSig&&!selected)return;lastRunSig=sig;
+  $('runs').innerHTML=list.map(r=>{const state=waiting.has(r.runId)?'waiting_for_human':r.state;return \`<div class="card run \${r.runId===selected?'sel':''}" onclick="select('\${esc(r.runId)}')"><div class="cap"><span class="name">\${esc(r.capability||r.runId)}</span><span class="st \${state}">\${stateLabel(state)}</span></div><div class="ref">\${esc(r.type)} · \${esc(r.runId)}</div></div>\`;}).join('')||'<div class="card muted">No runs yet.</div>';
 }
 
 function renderInterventions(list){
