@@ -93,6 +93,19 @@ class SequenceClient implements LLMClient {
   }
 }
 
+// Throws on the Nth decide, standing in for an Anthropic API error that
+// survived the client's own retries.
+class ThrowingClient implements LLMClient {
+  public readonly model = "test-model";
+  private index = 0;
+  public constructor(private readonly throwOn: number) {}
+  public async decide(_request: DecideRequest) {
+    this.index += 1;
+    if (this.index === this.throwOn) throw new Error("529 Overloaded\nservice temporarily unavailable");
+    return { decision: { kind: "click", ref: "field", reasoning: "act" } as AgentDecision, raw: {} };
+  }
+}
+
 const config: PolicyConfig = {
   allowed_origins: ["http://localhost:4478"],
   allowed_path_patterns: ["^/(desk|workspace)(/.*)?$"],
@@ -231,6 +244,21 @@ describe("runDiscovery", () => {
     const result = await runDiscovery({ goal: "Pick a search mode", target: "http://localhost:4478/desk", surface: new AlwaysFailingSurface(), policy: new PolicyEngine(config), llm, logger: new RunLogger("disc_actfail3", root) });
     expect(result.status).toBe("failure");
     expect(result.reason).toContain("Three consecutive browser actions failed");
+  });
+
+  it("finalizes evidence when the model call fails after its own retries", async () => {
+    // Before this fix an API error at any step threw out of the loop and the
+    // process died with no result.json - catastrophic right after an
+    // irreversible human step, whose transaction has already posted.
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const logger = new RunLogger("disc_llmfail", root);
+    const result = await runDiscovery({ goal: "Look up member 4521 balance", target: "http://localhost:4478/desk", surface: new FakeSurface(), policy: new PolicyEngine(config), llm: new ThrowingClient(1), logger });
+    expect(result.status).toBe("failure");
+    expect(result.reason).toContain("model call failed after retries");
+    // The run still wrote its result and finalized redaction.
+    const resultJson = await readFile(path.join(logger.directory, "result.json"), "utf8");
+    expect(JSON.parse(resultJson)).toMatchObject({ status: "failure" });
   });
 
   it("ignores a duplicate output mark so the model can continue or finish", async () => {

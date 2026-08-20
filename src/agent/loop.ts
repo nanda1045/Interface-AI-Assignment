@@ -129,7 +129,19 @@ export async function runDiscovery(options: {
     // The LLM sees only the system prompt, goal, semantic text observation,
     // recent history, and output names. It returns one schema-checked decision.
     const markedOutputs = Object.keys(outputs);
-    const response = await llm.decide({ system: discoverySystemPrompt(policy.config, Boolean(options.allowMutations), options.expectedOutputs), goal, observation: modelObservation, history, markedOutputs });
+    // The model call already retries transient API errors internally. If it
+    // still fails, finalize the run through finish() - writing result.json and
+    // completing redaction - rather than letting the exception escape and kill
+    // the process. This matters most right after an irreversible human step:
+    // the transaction has already posted, and the run must still leave a clean,
+    // redacted record instead of an orphaned half-run.
+    let response;
+    try {
+      response = await llm.decide({ system: discoverySystemPrompt(policy.config, Boolean(options.allowMutations), options.expectedOutputs), goal, observation: modelObservation, history, markedOutputs });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message.split("\n")[0]?.slice(0, 200) ?? "unknown" : "unknown";
+      return finish("failure", `The model call failed after retries at step ${step}: ${detail}`);
+    }
     if (response.decision.kind === "type" && response.decision.sensitive) logger.markSensitive(response.decision.text);
     await logger.transcript({ step, request: { goal, markedOutputs, observation: modelObservation, history }, response: response.raw });
     const decision = response.decision;
