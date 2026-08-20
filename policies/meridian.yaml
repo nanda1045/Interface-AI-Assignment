@@ -1,0 +1,14 @@
+# Deployment policy for the hosted MERIDIAN CORE target. /settings is included
+# deliberately: it is the demo error-injection switchboard and recording runs
+# need to zero the shared host's random error rate before starting.
+allowed_origins:
+  - https://web-sample.interface-hiring.com
+allowed_path_patterns:
+  - "^/(signon|signoff|menu|settings)$"
+  - "^/members(/.*)?$"
+allowed_actions: [navigate, click, focus, type, select, press, scroll]
+max_steps: 25
+max_duration_ms: 120000
+risk:
+  discovery_mutations: confirm
+  irreversible: escalate

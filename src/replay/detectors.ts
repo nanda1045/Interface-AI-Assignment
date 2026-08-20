@@ -34,6 +34,28 @@ export async function allPredicatesMatch(predicates: CapabilityArtifact["checkpo
   return true;
 }
 
+// What "the session died", "the app broke" and "a human is needed" look like on
+// one target application. This is per-app data, not engine logic: MERIDIAN's
+// timeout renders an inline page on the SAME url, so its detection is a text
+// pattern, while CorePoint's is a redirect to /login. Profiles supply these;
+// the defaults below are CorePoint's, and a test pins the corepoint.yaml
+// profile to them so the two cannot drift apart.
+export interface DetectorSignatures {
+  session_lost: { paths: string[]; patterns: string[] };
+  app_error: { patterns: string[] };
+  escalation: { patterns: string[] };
+}
+
+export const corePointSignatures: DetectorSignatures = {
+  session_lost: { paths: ["/login"], patterns: [] },
+  app_error: { patterns: ["Unexpected Application Error", "could not complete the request", "HTTP\\s*5\\d\\d"] },
+  escalation: { patterns: ["Supervisor override required"] }
+};
+
+function matchesAny(patterns: string[], text: string): string | undefined {
+  return patterns.find((pattern) => new RegExp(pattern, "i").test(text));
+}
+
 // Recognise application-wide terminal failures before/after individual steps.
 // Frames report locations like "about:blank" that are not parseable URLs, and a
 // detector must never be the thing that throws.
@@ -45,25 +67,36 @@ function pathOf(location: string): string | undefined {
   }
 }
 
-export function detectGlobalFailure(observation: Observation): { class: "session_lost" | "app_error"; observed: string } | undefined {
+export function detectGlobalFailure(
+  observation: Observation,
+  signatures: DetectorSignatures = corePointSignatures
+): { class: "session_lost" | "app_error"; observed: string } | undefined {
   const text = pageText(observation);
   // A framed application loses its session inside the workspace frame while the
   // top-level document stays exactly where it was, so every location has to be
   // considered rather than only the outermost one.
   const locations = [observation.url, ...observation.frames.map((frame) => frame.url)];
-  const loggedOut = locations.find((location) => pathOf(location) === "/login");
+  const loggedOut = locations.find((location) => signatures.session_lost.paths.includes(pathOf(location) ?? ""));
   if (loggedOut) {
     const where = loggedOut === observation.url ? "" : " in the workspace frame";
-    return { class: "session_lost", observed: `The application redirected to the login screen${where}.` };
+    return { class: "session_lost", observed: `The application redirected to the sign-on screen${where}.` };
   }
-  if (/Unexpected Application Error|could not complete the request|HTTP\s*5\d\d/i.test(text)) return { class: "app_error", observed: "The application displayed an unexpected error page." };
+  const timedOut = matchesAny(signatures.session_lost.patterns, text);
+  if (timedOut) return { class: "session_lost", observed: `The application reports the session has ended ("${timedOut}").` };
+  if (matchesAny(signatures.app_error.patterns, text)) return { class: "app_error", observed: "The application displayed an unexpected error page." };
   return undefined;
 }
 
 // Recognise authority walls and unknown dialogs that require human judgement.
-export function detectEscalation(observation: Observation): { reason: string; requestedAction: string } | undefined {
+// The unknown-dialog rule is generic engine behaviour and applies everywhere;
+// only the authority wording is per-application.
+export function detectEscalation(
+  observation: Observation,
+  signatures: DetectorSignatures = corePointSignatures
+): { reason: string; requestedAction: string } | undefined {
   const text = pageText(observation);
-  if (/Supervisor override required/i.test(text)) return { reason: "Supervisor override required", requestedAction: "Enter an authorized supervisor code and submit the confirmation form." };
+  const wall = matchesAny(signatures.escalation.patterns, text);
+  if (wall) return { reason: "Supervisor authority required", requestedAction: "Complete or decline the restricted step with supervisor authority, then hand back." };
   const dialog = observation.elements.find((element) => element.role === "dialog");
   if (dialog) return { reason: `Unrecognized dialog: ${dialog.name || dialog.text || "dialog"}`, requestedAction: "Review and safely resolve the dialog." };
   return undefined;

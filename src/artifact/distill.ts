@@ -23,7 +23,36 @@ export interface DistillOptions {
   version?: string;
   // Values collected by the evidence logger and scrubbed from artifact strings.
   sensitiveValues?: readonly string[];
+  /** Which application this capability belongs to, from the app profile.
+   *  Defaults to the fictional CorePoint target for compatibility. */
+  app?: CapabilityArtifact["capability"]["app"];
+  /** Authoring templates from the app profile. The selected concrete rules are
+   *  copied into the artifact, so replay still follows a reviewable contract -
+   *  the profile informs authoring, it is never consulted at run time. */
+  outcomeTemplates?: OutcomeTemplate[];
+  recoveryTemplates?: CapabilityArtifact["recovery"];
+  authenticatedVia?: string;
 }
+
+export interface OutcomeTemplate {
+  code: string;
+  when: CapabilityArtifact["outcomes"][number]["when"];
+  returns?: Record<string, unknown>;
+}
+
+// CorePoint's authoring defaults, kept so existing behaviour is unchanged when
+// no profile is supplied. profiles/corepoint.yaml carries the same values.
+const corePointOutcomeTemplates: OutcomeTemplate[] = [
+  { code: "MEMBER_NOT_FOUND", when: [{ kind: "text_visible", pattern: "No member found", frame: "workarea" }], returns: { found: false } },
+  { code: "PERMISSION_DENIED", when: [{ kind: "text_visible", pattern: "Access denied", frame: "workarea" }] }
+];
+
+const corePointRecoveryTemplates: CapabilityArtifact["recovery"] = [{
+  id: "dismiss_session_modal",
+  condition: { kind: "dialog_present", textPattern: "Session expiring" },
+  action: { kind: "click", target: { strategies: [{ kind: "role_name", role: "button", name: "Continue", frame: "workarea", unique: true, confidence: 0.9 }] } },
+  max_attempts: 1
+}];
 
 // Very short values would accidentally match common locator syntax and remove
 // almost every strategy, so taint matching starts at three characters.
@@ -152,13 +181,9 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
   }));
 
   // Known bounded recovery is explicit in the artifact rather than improvised by
-  // the model during replay.
-  const recovery: CapabilityArtifact["recovery"] = [{
-    id: "dismiss_session_modal",
-    condition: { kind: "dialog_present", textPattern: "Session expiring" },
-    action: { kind: "click", target: { strategies: [{ kind: "role_name", role: "button", name: "Continue", frame: "workarea", unique: true, confidence: 0.9 }] } },
-    max_attempts: 1
-  }];
+  // the model during replay. Templates come from the app profile at authoring
+  // time; the copied rules are what reviewers approve and replay follows.
+  const recovery: CapabilityArtifact["recovery"] = options.recoveryTemplates ?? corePointRecoveryTemplates;
 
   // Derive least privilege from recorded steps plus engine-driven entry and
   // recovery actions; do not grant every action supported by the platform.
@@ -181,7 +206,7 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
       version: options.version ?? "1.0.0",
       title: options.title,
       description: options.description,
-      app: { id: "corepoint-teller", vendor: "CorePoint Systems", ui_version_range: ">=3.1 <4" },
+      app: options.app ?? { id: "corepoint-teller", vendor: "CorePoint Systems", ui_version_range: ">=3.1 <4" },
       risk: options.risk ?? "read_only",
       status: "draft",
       provenance: {
@@ -196,14 +221,16 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
     },
     inputs: options.inputs,
     outputs: options.outputs,
-    entry: { url: options.entryUrl, preconditions: [{ kind: "authenticated", via: "mock-auth or an existing teller session" }] },
+    entry: { url: options.entryUrl, preconditions: [{ kind: "authenticated", via: options.authenticatedVia ?? "mock-auth or an existing teller session" }] },
     steps,
     checkpoint: { assert: extract.map((item) => ({ kind: "element_present" as const, target: item.from })) },
     extract,
-    outcomes: [
-      { code: "MEMBER_NOT_FOUND", at_steps: steps.map((step) => step.id), when: [{ kind: "text_visible", pattern: "No member found", frame: "workarea" }], returns: { found: false } },
-      { code: "PERMISSION_DENIED", at_steps: steps.map((step) => step.id), when: [{ kind: "text_visible", pattern: "Access denied", frame: "workarea" }] }
-    ],
+    outcomes: (options.outcomeTemplates ?? corePointOutcomeTemplates).map((template) => ({
+      code: template.code,
+      at_steps: steps.map((step) => step.id),
+      when: template.when,
+      ...(template.returns ? { returns: template.returns } : {})
+    })),
     recovery,
     policy: { allowed_origins: [origin], allowed_actions: allowedActions, max_duration_ms: 120_000 }
   });

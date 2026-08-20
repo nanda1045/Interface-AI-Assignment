@@ -1,0 +1,91 @@
+# MERIDIAN CORE (web-sample.interface-hiring.com) - the hosted legacy target.
+# Every pattern below was captured from the live application, not guessed;
+# the probe record is in the adaptation write-up. Two of its behaviours shaped
+# this file: the session timeout renders an inline 440 page on the SAME URL
+# (so text signatures are load-bearing, paths alone would never fire), and the
+# maintenance interstitial's Continue link lands on /menu rather than back on
+# the interrupted screen.
+app:
+  id: meridian-core
+  vendor: Cornerstone Financial Systems
+  ui_version_range: ">=4.2 <5"
+  origin: https://web-sample.interface-hiring.com
+policy: policies/meridian.yaml
+signon:
+  url: https://web-sample.interface-hiring.com/signon
+  fields:
+    operator: operator
+    password: password
+    branch: branch
+  # The footer reads "OPR TELLER1 | BR MAIN-001 | ..." once signed on and
+  # "NOT SIGNED ON" otherwise.
+  authenticated_pattern: "OPR\\s+[A-Z0-9]+"
+  failure_pattern: "Invalid operator ID or password"
+credentials:
+  teller:
+    operator_env: MERIDIAN_OPERATOR
+    password_env: MERIDIAN_PASSWORD
+    branch_env: MERIDIAN_BRANCH
+  supervisor:
+    operator_env: MERIDIAN_SUPERVISOR_OPERATOR
+    password_env: MERIDIAN_SUPERVISOR_PASSWORD
+    branch_env: MERIDIAN_BRANCH
+detectors:
+  session_lost:
+    paths: ["/signon"]
+    patterns:
+      - "YOUR SESSION HAS TIMED OUT"
+      - "session ended due to inactivity"
+      - "NOT SIGNED ON"
+  app_error:
+    patterns:
+      - "APPLICATION ERROR"
+      - "An unexpected error occurred while processing your request"
+  escalation:
+    patterns:
+      - "SUPERVISOR OVERRIDE REQUIRED"
+      - "A supervisor must sign on to complete this request"
+outcome_templates:
+  # Order matters: the engine takes the first matching outcome, and the
+  # insufficient-funds page also carries the generic validation banner.
+  - code: INSUFFICIENT_FUNDS
+    when:
+      - kind: text_visible
+        pattern: "Insufficient available balance"
+    returns:
+      posted: false
+  - code: MEMBER_NOT_FOUND
+    when:
+      - kind: text_visible
+        pattern: "RECORD NOT FOUND|could not be located on this host"
+    returns:
+      found: false
+  - code: VALIDATION_REJECTED
+    when:
+      - kind: text_visible
+        pattern: "could not be validated|Please correct the following|TRANSACTION REJECTED"
+    returns:
+      posted: false
+  - code: SIGNON_REJECTED
+    when:
+      - kind: text_visible
+        pattern: "Invalid operator ID or password"
+recovery_templates:
+  # The Continue link exits to /menu, so this recovery alone cannot resume the
+  # interrupted step; the bounded recovery effects added for this target are
+  # what make it usable. Until then it stays a declared, reviewable rule.
+  - id: maintenance_continue
+    condition:
+      kind: text_visible
+      pattern: "SCHEDULED MAINTENANCE IN PROGRESS"
+    action:
+      kind: click
+      target:
+        strategies:
+          - kind: text
+            value: Continue
+            control: a
+            frame: main
+            unique: true
+            confidence: 0.8
+    max_attempts: 2

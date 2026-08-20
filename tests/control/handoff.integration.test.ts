@@ -83,7 +83,9 @@ describe("same-session human handoff", () => {
     const running = replay({ artifact: capability(), params: { member_id: "4521", account_type: "Holiday Savings", opening_deposit: "25.00" }, surface, policy: new PolicyEngine(config), logger, handoff: controller });
     await controller.lease.waitFor("paused", 5_000);
     const request = controller.list()[0]!;
-    expect(request).toMatchObject({ step: "s8", reason: "Supervisor override required" });
+    // The reason is engine wording now that wall text varies per application
+    // profile; which pattern fired is a per-app detail.
+    expect(request).toMatchObject({ step: "s8", reason: "Supervisor authority required" });
     await controller.takeControl(request.id, "supervisor@example.test");
 
     const workarea = page.frameLocator("iframe[name='workarea']");

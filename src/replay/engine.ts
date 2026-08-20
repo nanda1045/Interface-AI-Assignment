@@ -7,7 +7,7 @@ import type { HandoffCoordinator } from "../control/intervention.js";
 import type { RunLogger } from "../evidence/run-logger.js";
 import { inferRisk, type PolicyEngine } from "../policy/engine.js";
 import type { AbstractAction, Observation, ResolutionFailure, ResolvedElement, Surface, TargetSpec } from "../surface/types.js";
-import { allPredicatesMatch, detectEscalation, detectGlobalFailure, predicateMatches } from "./detectors.js";
+import { allPredicatesMatch, corePointSignatures, detectEscalation, detectGlobalFailure, predicateMatches, type DetectorSignatures } from "./detectors.js";
 import { dispositionFor, type FailureClass, type ReplayResult, type TierStats } from "./result.js";
 
 // All runtime dependencies are explicit and browser-independent through Surface.
@@ -19,6 +19,9 @@ export interface ReplayOptions {
   logger: RunLogger;
   confirmMutations?: boolean;
   handoff?: HandoffCoordinator;
+  /** Per-application failure/escalation signatures from the app profile.
+   *  Defaults to CorePoint's so existing artifacts keep their behaviour. */
+  signatures?: DetectorSignatures;
 }
 
 // Validate the concrete invocation against the artifact's declared input contract
@@ -116,6 +119,7 @@ async function observeAfterAction(surface: Surface, priorHash: string, timeoutMs
 // Execute one capability invocation from entry navigation through terminal result.
 export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   const { artifact, params, surface, policy, logger } = options;
+  const signatures = options.signatures ?? corePointSignatures;
   const stats: TierStats = { resolutions: 0, matched_tiers: {}, matched_strategies: {}, rescued_steps: [] };
   const recoveryAttempts = new Map<string, number>();
   const deadline = Date.now() + Math.min(artifact.policy.max_duration_ms, policy.config.max_duration_ms);
@@ -174,7 +178,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
 
       // Before acting, detect global application/session failures, apply bounded
       // recovery, offer handoff for approval walls, and classify business outcomes.
-      const preGlobal = detectGlobalFailure(observation);
+      const preGlobal = detectGlobalFailure(observation, signatures);
       if (preGlobal) {
         if (preGlobal.class !== "session_lost" || !options.handoff) return fail(preGlobal.class, "An authenticated, healthy application screen.", preGlobal.observed);
         const resume = await requestHandoff(step, observation, preGlobal.observed, "Re-authenticate in the live browser session.");
@@ -187,7 +191,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
 
       const recovered = await applyRecovery(observation, index + 1);
       if (recovered) observation = await surface.observe();
-      const preEscalation = detectEscalation(observation);
+      const preEscalation = detectEscalation(observation, signatures);
       if (preEscalation && options.handoff) {
         const resume = await requestHandoff(step, observation, preEscalation.reason, preEscalation.requestedAction);
         if (resume === "timed_out") return fail("timeout", "A human operator to take control of the paused run.", "The intervention request expired with no operator.");
@@ -226,7 +230,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
 
       // Re-observe after the action, then detect hard failures, declared outcomes,
       // recovery conditions, escalation walls, and finally step postconditions.
-      const global = detectGlobalFailure(observation);
+      const global = detectGlobalFailure(observation, signatures);
       if (global) {
         if (global.class !== "session_lost" || !options.handoff) return fail(global.class, "A healthy application screen after the action.", global.observed);
         const resume = await requestHandoff(step, observation, global.observed, "Re-authenticate in the live browser session.");
@@ -239,7 +243,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       const outcome = await detectOutcome(step.id, observation);
       if (outcome) return outcome;
       if (await applyRecovery(observation, index + 1)) observation = await surface.observe();
-      const escalation = detectEscalation(observation);
+      const escalation = detectEscalation(observation, signatures);
       if (escalation && options.handoff) {
         const resume = await requestHandoff(step, observation, escalation.reason, escalation.requestedAction);
         if (resume === "timed_out") return fail("timeout", "A human operator to take control of the paused run.", "The intervention request expired with no operator.");

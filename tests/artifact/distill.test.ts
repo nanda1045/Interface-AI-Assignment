@@ -91,6 +91,24 @@ describe("distillDiscovery", () => {
     expect(artifact.steps).toHaveLength(3);
   });
 
+  it("copies profile authoring templates into the artifact instead of CorePoint's", () => {
+    // The profile informs authoring; the artifact carries the chosen rules, so
+    // replay still follows a reviewable contract and never consults a profile.
+    const artifact = distillDiscovery(result, {
+      ...options,
+      app: { id: "meridian-core", vendor: "Cornerstone Financial Systems", ui_version_range: ">=4.2 <5" },
+      outcomeTemplates: [{ code: "RECORD_MISSING", when: [{ kind: "text_visible", pattern: "RECORD NOT FOUND" }] }],
+      recoveryTemplates: []
+    });
+    expect(artifact.capability.app.id).toBe("meridian-core");
+    expect(artifact.outcomes.map((outcome) => outcome.code)).toEqual(["RECORD_MISSING"]);
+    expect(artifact.outcomes[0]?.at_steps).toEqual(artifact.steps.map((step) => step.id));
+    expect(artifact.recovery).toEqual([]);
+    // Defaults unchanged when no profile is involved.
+    const plain = distillDiscovery(result, options);
+    expect(plain.outcomes.map((outcome) => outcome.code)).toEqual(["MEMBER_NOT_FOUND", "PERMISSION_DENIED"]);
+  });
+
   it("refuses the artifact when run data emptied a ladder", () => {
     expect(() => distillDiscovery(runWith({ locators: bundle(roleName("View account 4521-01")) }), options))
       .toThrow(/step 1 was built from run-specific data/);

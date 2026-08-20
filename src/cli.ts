@@ -22,6 +22,8 @@ import { formatStressReport, scoreStress, type StressRow } from "./eval/stress.j
 import { createRunId, RunLogger } from "./evidence/run-logger.js";
 import { ask } from "./invoke/ask.js";
 import { PolicyEngine } from "./policy/engine.js";
+import { signOn } from "./profile/bootstrap.js";
+import { profileForApp, profileForOrigin, resolveCredentials } from "./profile/profile.js";
 import { replay } from "./replay/engine.js";
 import type { ReplayResult } from "./replay/result.js";
 import { WebSurface } from "./surface/web-playwright.js";
@@ -65,6 +67,9 @@ interface ReplayRunOptions {
   confirmMutations?: boolean;
   // Used only by stress runs to change the UI before application scripts run.
   mutationScript?: string;
+  /** Named credential set from the app profile; triggers a real sign-on before
+   *  replay. The alternative for the fictional target is --mock-auth. */
+  auth?: string;
 }
 
 // Shared execution path for replay, approval validation, and stress runs. This
@@ -79,6 +84,12 @@ async function runReplay(options: ReplayRunOptions): Promise<{ result: ReplayRes
   if (resolved.reference !== options.reference) console.error(`Resolved ${options.reference} to ${resolved.reference}.`);
   let artifact = await store.load(resolved.reference);
   if (options.overlay) artifact = applyOverlay(artifact, await loadOverlay(options.overlay));
+
+  // The profile is chosen by the artifact's own app id - never by a caller
+  // argument, which could select weaker detection than the capability was
+  // recorded against. Unprofiled apps keep the built-in CorePoint defaults.
+  const profile = await profileForApp(artifact.capability.app.id);
+  const policyPath = options.policy === "policies/default.yaml" && profile ? profile.policy : options.policy;
   if (options.handoff && options.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
 
   // Create the real browser session. Mock authentication is deliberately
@@ -111,9 +122,16 @@ async function runReplay(options: ReplayRunOptions): Promise<{ result: ReplayRes
   try {
     // The replay engine receives only abstractions and validated inputs. Both
     // the artifact policy and deployment policy are enforced inside replay.
+    const policyEngine = await PolicyEngine.fromFile(policyPath);
+    if (options.auth) {
+      if (!profile) throw new Error(`--auth needs an app profile for ${artifact.capability.app.id}, and none was found in profiles/.`);
+      await signOn({ surface, policy: policyEngine, logger, profile, credentials: resolveCredentials(profile, options.auth) });
+    }
     const result = await replay({
-      artifact, params: options.params, surface, policy: await PolicyEngine.fromFile(options.policy),
-      logger, confirmMutations: options.confirmMutations ?? false, ...(controller ? { handoff: controller } : {})
+      artifact, params: options.params, surface, policy: policyEngine,
+      logger, confirmMutations: options.confirmMutations ?? false,
+      ...(profile ? { signatures: profile.detectors } : {}),
+      ...(controller ? { handoff: controller } : {})
     });
     return { result, runId: options.runId };
   } finally {
@@ -136,6 +154,7 @@ program.command("discover")
   .option("--headless", "run without a visible browser", false)
   .option("--allow-mutations", "permit mutating discovery actions", false)
   .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
+  .option("--auth <credentials>", "named credential set from the app profile; performs a real sign-on")
   .option("--capability-id <id>", "distill a draft artifact with this id")
   .option("--title <title>", "artifact title")
   .option("--description <description>", "artifact description")
@@ -148,7 +167,7 @@ program.command("discover")
   .option("--console-port <port>", "operator console port", "4590")
   .option("--run-root <path>", "run evidence directory", "runs")
   .option("--run-id <id>", "explicit run id (useful for reproducible evidence)")
-  .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; capabilityId?: string; title?: string; description?: string; param: string[]; output: string[]; artifactRoot: string; bump?: string; overwriteArtifact: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
+  .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; auth?: string; capabilityId?: string; title?: string; description?: string; param: string[]; output: string[]; artifactRoot: string; bump?: string; overwriteArtifact: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
     // Discovery is the only command that creates an LLM client.
     if (raw.provider !== "openai" && raw.provider !== "anthropic") throw new Error("--provider must be openai or anthropic.");
     if (raw.handoff && raw.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
@@ -169,9 +188,19 @@ program.command("discover")
       await installHumanRecorder(page, controller, logger);
       console.error(`Operator console: http://127.0.0.1:${raw.consolePort}`);
     }
-    const policy = await PolicyEngine.fromFile(raw.policy);
+    // Discovery selects a profile by where it is pointed, before any artifact
+    // exists to carry an app id. The profile supplies the default policy, the
+    // sign-on bootstrap and the authoring templates for distillation.
+    const profile = await profileForOrigin(target.origin);
+    const policyPath = raw.policy === "policies/default.yaml" && profile ? profile.policy : raw.policy;
+    const policy = await PolicyEngine.fromFile(policyPath);
     const llm = chooseClient(raw.provider);
     try {
+      if (raw.auth) {
+        if (!profile) throw new Error(`--auth needs an app profile for ${target.origin}, and none was found in profiles/.`);
+        await logger.initialize();
+        await signOn({ surface, policy, logger, profile, credentials: resolveCredentials(profile, raw.auth) });
+      }
       // The discovery loop returns a recorded trajectory with verified locator
       // ladders; it does not directly write a capability artifact.
       const result = await runDiscovery({ goal: raw.goal, target: raw.url, surface, policy, llm, logger, allowMutations: raw.allowMutations, expectedOutputs: raw.output, ...(controller ? { handoff: controller } : {}) });
@@ -202,6 +231,12 @@ program.command("discover")
           params,
           ...(version ? { version } : {}),
           sensitiveValues: logger.knownSensitiveValues(),
+          ...(profile ? {
+            app: { id: profile.app.id, vendor: profile.app.vendor, ui_version_range: profile.app.ui_version_range },
+            outcomeTemplates: profile.outcome_templates,
+            recoveryTemplates: profile.recovery_templates,
+            authenticatedVia: raw.auth ? `profile sign-on (${raw.auth})` : "an existing operator session"
+          } : {}),
           inputs: { type: "object", required: Object.keys(params), properties: Object.fromEntries(Object.keys(params).map((name) => [name, { type: "string", sensitive: /member|account|ssn/i.test(name) }])) },
           outputs: { type: "object", required: Object.keys(result.outputs), properties: Object.fromEntries(Object.keys(result.outputs).map((name) => [name, { type: "string", ...(/member|name|balance|account|ssn/i.test(name) ? { sensitive: true } : {}), ...(name.includes("balance") ? { "x-format": "usd-currency" } : {}) }])) }
         });
@@ -231,8 +266,9 @@ program.command("approve")
   .option("--overlay <path>", "tenant overlay JSON")
   .option("--headless", "run the validation replay without a visible browser", false)
   .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
+  .option("--auth <credentials>", "named credential set from the app profile; performs a real sign-on")
   .option("--run-root <path>", "run evidence directory", "runs")
-  .action(async (reference: string, raw: { by: string; param: string[]; policy: string; artifactRoot: string; overlay?: string; headless: boolean; mockAuth: boolean; runRoot: string }) => {
+  .action(async (reference: string, raw: { by: string; param: string[]; policy: string; artifactRoot: string; overlay?: string; headless: boolean; mockAuth: boolean; auth?: string; runRoot: string }) => {
     const store = new ArtifactStore(raw.artifactRoot);
     const params = parseAssignments(raw.param);
 
@@ -240,7 +276,7 @@ program.command("approve")
     // approval of such capabilities must always use safe test data.
     const validation = await runReplay({
       reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, overlay: raw.overlay,
-      headless: raw.headless, mockAuth: raw.mockAuth, runRoot: raw.runRoot, runId: createRunId("replay"),
+      headless: raw.headless, mockAuth: raw.mockAuth, auth: raw.auth, runRoot: raw.runRoot, runId: createRunId("replay"),
       confirmMutations: true
     });
     if (validation.result.status !== "success") {
@@ -265,15 +301,16 @@ program.command("replay")
   .option("--headless", "run without a visible browser", false)
   .option("--confirm-mutations", "interactively approved this mutating replay", false)
   .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
+  .option("--auth <credentials>", "named credential set from the app profile; performs a real sign-on")
   .option("--handoff", "enable same-session human intervention", false)
   .option("--console-port <port>", "operator console port", "4590")
   .option("--run-root <path>", "run evidence directory", "runs")
   .option("--run-id <id>", "explicit run id (useful for reproducible evidence)")
-  .action(async (reference: string, raw: { param: string[]; policy: string; artifactRoot: string; overlay?: string; chaos?: string; headless: boolean; confirmMutations: boolean; mockAuth: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
+  .action(async (reference: string, raw: { param: string[]; policy: string; artifactRoot: string; overlay?: string; chaos?: string; headless: boolean; confirmMutations: boolean; mockAuth: boolean; auth?: string; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
     const { result } = await runReplay({
       reference, params: parseAssignments(raw.param), policy: raw.policy, artifactRoot: raw.artifactRoot,
       overlay: raw.overlay, chaos: raw.chaos, headless: raw.headless, confirmMutations: raw.confirmMutations,
-      mockAuth: raw.mockAuth, handoff: raw.handoff, consolePort: raw.consolePort, runRoot: raw.runRoot,
+      mockAuth: raw.mockAuth, auth: raw.auth, handoff: raw.handoff, consolePort: raw.consolePort, runRoot: raw.runRoot,
       runId: raw.runId ?? createRunId("replay")
     });
     console.log(JSON.stringify(result, null, 2));
@@ -312,10 +349,11 @@ program.command("ask")
   .option("--policy <path>", "policy YAML", "policies/default.yaml")
   .option("--artifact-root <path>", "artifact directory", "artifacts")
   .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
+  .option("--auth <credentials>", "named credential set from the app profile; performs a real sign-on")
   .option("--headless", "run the capability without a visible browser", false)
   .option("--allow-mutations", "permit answering with a capability that changes records", false)
   .option("--run-root <path>", "run evidence directory", "runs")
-  .action(async (question: string, raw: { policy: string; artifactRoot: string; mockAuth: boolean; headless: boolean; allowMutations: boolean; runRoot: string }) => {
+  .action(async (question: string, raw: { policy: string; artifactRoot: string; mockAuth: boolean; auth?: string; headless: boolean; allowMutations: boolean; runRoot: string }) => {
     if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is required to answer a question.");
     const catalog = buildCatalog(await new ArtifactStore(raw.artifactRoot).approved());
     if (catalog.length === 0) throw new Error("No approved capabilities to answer with. Approve one first.");
@@ -327,7 +365,7 @@ program.command("ask")
         console.error(`Invoking ${reference} with ${JSON.stringify(params)}`);
         const { result: replayed } = await runReplay({
           reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, headless: raw.headless,
-          mockAuth: raw.mockAuth, runRoot: raw.runRoot, runId: createRunId("replay"),
+          mockAuth: raw.mockAuth, auth: raw.auth, runRoot: raw.runRoot, runId: createRunId("replay"),
           confirmMutations: raw.allowMutations
         });
         console.error(`→ ${replayed.status}`);
@@ -346,8 +384,9 @@ program.command("stress")
   .option("--policy <path>", "policy YAML", "policies/default.yaml")
   .option("--artifact-root <path>", "artifact directory", "artifacts")
   .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
+  .option("--auth <credentials>", "named credential set from the app profile; performs a real sign-on")
   .option("--run-root <path>", "run evidence directory", "runs")
-  .action(async (reference: string, raw: { param: string[]; expect: string[]; mutations?: string; policy: string; artifactRoot: string; mockAuth: boolean; runRoot: string }) => {
+  .action(async (reference: string, raw: { param: string[]; expect: string[]; mutations?: string; policy: string; artifactRoot: string; mockAuth: boolean; auth?: string; runRoot: string }) => {
     const params = parseAssignments(raw.param);
     const expected = parseAssignments(raw.expect);
     const chosen = raw.mutations ? raw.mutations.split(",").map((id) => mutationById(id.trim())) : uiMutations;
@@ -355,7 +394,7 @@ program.command("stress")
     for (const mutation of chosen) {
       const { result } = await runReplay({
         reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, headless: true,
-        mockAuth: raw.mockAuth, runRoot: raw.runRoot, runId: `stress_${mutation.id}`,
+        mockAuth: raw.mockAuth, auth: raw.auth, runRoot: raw.runRoot, runId: `stress_${mutation.id}`,
         ...(mutation.script ? { mutationScript: mutation.script } : {})
       });
       rows.push(scoreStress(mutation, result, expected));

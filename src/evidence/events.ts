@@ -18,6 +18,7 @@ export type RunEvent =
   | { type: "intervention_requested"; request: InterventionRequest }
   | { type: "lease_change"; state: ControlState }
   | { type: "human_action"; action: { kind: string; control?: string; value?: string; url?: string } }
+  | { type: "signed_on"; operator: string; app: string }
   | { type: "stopped"; reason: string }
   | { type: "result"; status: "success" | "business_outcome" | "escalated" | "failure"; detail: unknown };
 
