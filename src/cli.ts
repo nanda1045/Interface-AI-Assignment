@@ -11,7 +11,6 @@ import type { LLMClient } from "./agent/llm/client.js";
 import { OpenAIClient } from "./agent/llm/openai.js";
 import { distillDiscovery } from "./artifact/distill.js";
 import { buildCatalog } from "./artifact/catalog.js";
-import { applyOverlay, loadOverlay } from "./artifact/overlay.js";
 import { ArtifactStore } from "./artifact/store.js";
 import { bumpVersion } from "./artifact/versioning.js";
 import { startConsole } from "./control/console-server.js";
@@ -23,9 +22,8 @@ import { createRunId, RunLogger } from "./evidence/run-logger.js";
 import { ask } from "./invoke/ask.js";
 import { PolicyEngine } from "./policy/engine.js";
 import { signOn } from "./profile/bootstrap.js";
-import { profileForApp, profileForOrigin, resolveCredentials } from "./profile/profile.js";
-import { replay } from "./replay/engine.js";
-import type { ReplayResult } from "./replay/result.js";
+import { profileForOrigin, resolveCredentials } from "./profile/profile.js";
+import { runCapability } from "./run/runner.js";
 import { WebSurface } from "./surface/web-playwright.js";
 
 // Discovery can use either provider through one LLMClient interface. Replay
@@ -47,98 +45,6 @@ function parseAssignments(values: string[]): Record<string, string> {
     if (separator <= 0) throw new Error(`Expected name=value, received: ${assignment}`);
     return [assignment.slice(0, separator), assignment.slice(separator + 1)];
   }));
-}
-
-// All inputs needed to create one deterministic replay session. Optional fields
-// enable test or operational features without changing the replay engine.
-interface ReplayRunOptions {
-  reference: string;
-  params: Record<string, string>;
-  policy: string;
-  artifactRoot: string;
-  runRoot: string;
-  runId: string;
-  headless: boolean;
-  mockAuth: boolean;
-  overlay?: string;
-  chaos?: string;
-  handoff?: boolean;
-  consolePort?: string;
-  confirmMutations?: boolean;
-  // Used only by stress runs to change the UI before application scripts run.
-  mutationScript?: string;
-  /** Named credential set from the app profile; triggers a real sign-on before
-   *  replay. The alternative for the fictional target is --mock-auth. */
-  auth?: string;
-}
-
-// Shared execution path for replay, approval validation, and stress runs. This
-// prevents approval or testing from using an easier path than normal replay.
-async function runReplay(options: ReplayRunOptions): Promise<{ result: ReplayResult; runId: string }> {
-  // Load the immutable capability contract, then optionally adapt its approved
-  // deployment-specific fields with a tenant overlay.
-  const store = new ArtifactStore(options.artifactRoot);
-  // Resolve before loading so an operator watching a run can see which version a
-  // bare name or a range actually selected.
-  const resolved = await store.resolve(options.reference);
-  if (resolved.reference !== options.reference) console.error(`Resolved ${options.reference} to ${resolved.reference}.`);
-  let artifact = await store.load(resolved.reference);
-  if (options.overlay) artifact = applyOverlay(artifact, await loadOverlay(options.overlay));
-
-  // The profile is chosen by the artifact's own app id - never by a caller
-  // argument, which could select weaker detection than the capability was
-  // recorded against. Unprofiled apps keep the built-in CorePoint defaults.
-  const profile = await profileForApp(artifact.capability.app.id);
-  const policyPath = options.policy === "policies/default.yaml" && profile ? profile.policy : options.policy;
-  if (options.handoff && options.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
-
-  // Create the real browser session. Mock authentication is deliberately
-  // restricted to the two fictional localhost tenants.
-  const browser = await chromium.launch({ headless: options.headless });
-  const context = await browser.newContext();
-  const entry = new URL(artifact.entry.url);
-  if (options.mockAuth) {
-    if (!["http://localhost:4478", "http://localhost:4479"].includes(entry.origin)) throw new Error("--mock-auth is restricted to the fictional local CorePoint app.");
-    await context.addCookies([{ name: "cp_session", value: `teller:${entry.port === "4479" ? "b" : "a"}`, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
-  }
-  if (options.chaos) await context.addCookies([{ name: "cp_chaos", value: options.chaos, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
-  const page = await context.newPage();
-
-  // Stress mutations are injected only when explicitly requested. Ordinary
-  // replay runs against the page without this script.
-  if (options.mutationScript) await page.addInitScript({ content: options.mutationScript });
-
-  // Evidence, human-control coordination, and the Playwright Surface all share
-  // this one browser session. The lease prevents agent and human acting together.
-  const logger = new RunLogger(options.runId, options.runRoot);
-  await logger.initialize();
-  const controller = options.handoff ? new RunController(logger) : undefined;
-  const surface = new WebSurface(page, { browser, context, ...(controller ? { canAgentAct: () => controller.lease.agentCanAct() } : {}) });
-  const consoleServer = controller ? await startConsole(controller, Number(options.consolePort ?? 4590)) : undefined;
-  if (controller) {
-    await installHumanRecorder(page, controller, logger);
-    console.error(`Operator console: http://127.0.0.1:${options.consolePort ?? 4590}`);
-  }
-  try {
-    // The replay engine receives only abstractions and validated inputs. Both
-    // the artifact policy and deployment policy are enforced inside replay.
-    const policyEngine = await PolicyEngine.fromFile(policyPath);
-    if (options.auth) {
-      if (!profile) throw new Error(`--auth needs an app profile for ${artifact.capability.app.id}, and none was found in profiles/.`);
-      await signOn({ surface, policy: policyEngine, logger, profile, credentials: resolveCredentials(profile, options.auth) });
-    }
-    const result = await replay({
-      artifact, params: options.params, surface, policy: policyEngine,
-      logger, confirmMutations: options.confirmMutations ?? false,
-      ...(profile ? { signatures: profile.detectors } : {}),
-      ...(controller ? { handoff: controller } : {})
-    });
-    return { result, runId: options.runId };
-  } finally {
-    // Always release the local console and browser, including on failure.
-    if (consoleServer) await new Promise<void>((resolve, reject) => consoleServer.close((error) => error ? reject(error) : resolve()));
-    await surface.close();
-  }
 }
 
 const program = new Command();
@@ -274,9 +180,9 @@ program.command("approve")
 
     // confirmMutations permits validation of a mutating draft, which means
     // approval of such capabilities must always use safe test data.
-    const validation = await runReplay({
+    const validation = await runCapability({
       reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, overlay: raw.overlay,
-      headless: raw.headless, mockAuth: raw.mockAuth, auth: raw.auth, runRoot: raw.runRoot, runId: createRunId("replay"),
+      headless: raw.headless, mockAuth: raw.mockAuth, auth: raw.auth, runRoot: raw.runRoot, runId: createRunId("approval"),
       confirmMutations: true
     });
     if (validation.result.status !== "success") {
@@ -307,7 +213,7 @@ program.command("replay")
   .option("--run-root <path>", "run evidence directory", "runs")
   .option("--run-id <id>", "explicit run id (useful for reproducible evidence)")
   .action(async (reference: string, raw: { param: string[]; policy: string; artifactRoot: string; overlay?: string; chaos?: string; headless: boolean; confirmMutations: boolean; mockAuth: boolean; auth?: string; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
-    const { result } = await runReplay({
+    const { result } = await runCapability({
       reference, params: parseAssignments(raw.param), policy: raw.policy, artifactRoot: raw.artifactRoot,
       overlay: raw.overlay, chaos: raw.chaos, headless: raw.headless, confirmMutations: raw.confirmMutations,
       mockAuth: raw.mockAuth, auth: raw.auth, handoff: raw.handoff, consolePort: raw.consolePort, runRoot: raw.runRoot,
@@ -363,7 +269,7 @@ program.command("ask")
       // path every other caller uses, with no model in the decision loop.
       execute: async (reference, params) => {
         console.error(`Invoking ${reference} with ${JSON.stringify(params)}`);
-        const { result: replayed } = await runReplay({
+        const { result: replayed } = await runCapability({
           reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, headless: raw.headless,
           mockAuth: raw.mockAuth, auth: raw.auth, runRoot: raw.runRoot, runId: createRunId("replay"),
           confirmMutations: raw.allowMutations
@@ -392,7 +298,7 @@ program.command("stress")
     const chosen = raw.mutations ? raw.mutations.split(",").map((id) => mutationById(id.trim())) : uiMutations;
     const rows: StressRow[] = [];
     for (const mutation of chosen) {
-      const { result } = await runReplay({
+      const { result } = await runCapability({
         reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, headless: true,
         mockAuth: raw.mockAuth, auth: raw.auth, runRoot: raw.runRoot, runId: `stress_${mutation.id}`,
         ...(mutation.script ? { mutationScript: mutation.script } : {})

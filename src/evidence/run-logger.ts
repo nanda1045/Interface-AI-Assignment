@@ -116,6 +116,6 @@ export class RunLogger {
 }
 
 // Human-readable UTC run ID used as the evidence directory name.
-export function createRunId(prefix: "disc" | "replay", now = new Date()): string {
+export function createRunId(prefix: "disc" | "replay" | "approval", now = new Date()): string {
   return `${prefix}_${now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")}`;
 }
