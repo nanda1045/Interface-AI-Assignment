@@ -9,6 +9,9 @@ import { ArtifactStore } from "../../src/artifact/store.js";
 import type { CapabilityArtifact } from "../../src/artifact/schema.js";
 import { RunService } from "../../src/run/service.js";
 import type { CapabilityRunOptions } from "../../src/run/runner.js";
+import type { RouteDecision, RouteOptions } from "../../src/chat/router.js";
+
+type ApiChatRoute = (options: RouteOptions) => Promise<RouteDecision>;
 import { validArtifact } from "../artifact/schema.test.js";
 import type { ReplayResult } from "../../src/replay/result.js";
 
@@ -30,12 +33,12 @@ describe("adaptation API", () => {
   let base: string;
   let calls: CapabilityRunOptions[];
 
-  async function boot(demoMode = false) {
+  async function boot(demoMode = false, chatRoute?: ApiChatRoute) {
     const execute = async (options: CapabilityRunOptions) => {
       calls.push(options);
       return { result: okResult, runId: options.runId, reference: options.reference };
     };
-    const built = createApiApp({ store, runs, runRoot: path.join(root, "runs"), demoMode, execute });
+    const built = createApiApp({ store, runs, runRoot: path.join(root, "runs"), demoMode, execute, ...(chatRoute ? { chatRoute } : {}) });
     server = built.app.listen(0, "127.0.0.1");
     await new Promise<void>((resolve) => server.once("listening", () => resolve()));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -193,5 +196,31 @@ describe("adaptation API", () => {
     await boot();
     expect((await post("/api/interventions/replay_none/take", { operator: "me" })).status).toBe(404);
     expect((await post("/api/interventions/replay_none/hand-back", {})).status).toBe(404);
+  });
+
+  it("reports the chat endpoint unconfigured without a key or injected router", async () => {
+    await boot();
+    expect((await post("/api/chat", { message: "hi" })).status).toBe(503);
+  });
+
+  it("routes a chat message through to a formatted answer, executing the shared runner", async () => {
+    await boot(false, async () => ({ kind: "capability", name: "read_cap", inputs: { member_id: "4521" } }));
+    const { status, body } = await post("/api/chat", { message: "balance for 4521" });
+    expect(status).toBe(200);
+    expect(body.action).toBe("answered");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.headless).toBe(true);
+  });
+
+  it("gates a mutating chat action behind confirmation", async () => {
+    await boot(false, async () => ({ kind: "capability", name: "mutate_cap", inputs: { member_id: "4521" } }));
+    const denied = await post("/api/chat", { message: "update it" });
+    expect(denied.body.action).toBe("confirmation_required");
+    expect(calls).toHaveLength(0);
+    const confirmed = await post("/api/chat", { message: "update it", confirm: true });
+    expect(confirmed.body.action).toBe("answered");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls[0]?.confirmMutations).toBe(true);
   });
 });

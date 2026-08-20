@@ -19,7 +19,7 @@ import { installHumanRecorder } from "./control/human-recorder.js";
 import { mutationById, uiMutations } from "./eval/mutations.js";
 import { formatStressReport, scoreStress, type StressRow } from "./eval/stress.js";
 import { createRunId, RunLogger } from "./evidence/run-logger.js";
-import { ask } from "./invoke/ask.js";
+import { chat } from "./chat/chat.js";
 import { PolicyEngine } from "./policy/engine.js";
 import { signOn } from "./profile/bootstrap.js";
 import { profileForOrigin, resolveCredentials } from "./profile/profile.js";
@@ -271,22 +271,26 @@ program.command("ask")
     if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is required to answer a question.");
     const catalog = buildCatalog(await new ArtifactStore(raw.artifactRoot).approved());
     if (catalog.length === 0) throw new Error("No approved capabilities to answer with. Approve one first.");
-    const result = await ask({
-      question, catalog, apiKey: process.env.ANTHROPIC_API_KEY, allowMutations: raw.allowMutations,
-      // The model chooses which capability; this runs it through exactly the
-      // path every other caller uses, with no model in the decision loop.
-      execute: async (reference, params) => {
+    const result = await chat({
+      message: question, catalog, apiKey: process.env.ANTHROPIC_API_KEY,
+      // The CLI is one-shot, so --allow-mutations is the user's confirmation for
+      // a data-changing capability. Irreversible capabilities still refuse here.
+      confirm: raw.allowMutations,
+      // The model only chooses the capability; this runs it through exactly the
+      // path every other caller uses, and the reply is formatted by code, never
+      // by the model.
+      execute: async (reference, params, executeOptions) => {
         console.error(`Invoking ${reference} with ${JSON.stringify(params)}`);
         const { result: replayed } = await runCapability({
           reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, headless: raw.headless,
           mockAuth: raw.mockAuth, auth: raw.auth, runRoot: raw.runRoot, runId: createRunId("replay"),
-          confirmMutations: raw.allowMutations
+          confirmMutations: executeOptions?.confirmMutations ?? false
         });
         console.error(`→ ${replayed.status}`);
         return replayed;
       }
     });
-    console.log(result.answer);
+    console.log(result.reply);
   });
 
 program.command("stress")

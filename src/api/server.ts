@@ -13,12 +13,14 @@ import path from "node:path";
 import { buildCatalog } from "../artifact/catalog.js";
 import type { ArtifactStore } from "../artifact/store.js";
 import type { CapabilityArtifact, ObjectContract } from "../artifact/schema.js";
+import { chat, type CapabilityExecutor } from "../chat/chat.js";
+import type { RouteDecision, RouteOptions } from "../chat/router.js";
 import type { RunController } from "../control/controller.js";
 import { createRunId } from "../evidence/run-logger.js";
 import type { CapabilityRunOptions, CapabilityRunOutcome } from "../run/runner.js";
 import { runCapability } from "../run/runner.js";
 import type { RunService } from "../run/service.js";
-import { evidenceFileSchema, runIdSchema, runRequestSchema, takeControlSchema } from "./schemas.js";
+import { chatRequestSchema, evidenceFileSchema, runIdSchema, runRequestSchema, takeControlSchema } from "./schemas.js";
 
 // A controller registry the dashboard/console shares with the API: a handoff run
 // registers its coordinator here so the intervention routes can serve it. Read
@@ -35,6 +37,12 @@ export interface ApiDependencies {
    *  fake so the API can be exercised without Playwright or a live target. */
   execute?: (options: CapabilityRunOptions) => Promise<CapabilityRunOutcome>;
   interventions?: InterventionRegistry;
+  /** Chatbot wiring. Without an API key (and no injected router) the chat
+   *  endpoint reports itself unconfigured rather than failing obscurely. */
+  chatApiKey?: string;
+  chatModel?: string;
+  /** Injectable router so the chat endpoint is testable without a model call. */
+  chatRoute?: (options: RouteOptions) => Promise<RouteDecision>;
 }
 
 // Reject unknown and missing inputs at the door. Type coercion and deep checks
@@ -162,6 +170,39 @@ export function createApiApp(deps: ApiDependencies) {
       });
 
       response.status(202).json({ run_id: runId, status: "queued", status_url: `/api/runs/${runId}` });
+    } catch (error) { next(error); }
+  });
+
+  // A chatbot turn: route (model) -> risk gate -> execute (shared path) ->
+  // deterministic format. The model never sees the result and never phrases the
+  // reply. Executes through the same runner as every other caller.
+  app.post("/api/chat", async (request, response, next) => {
+    try {
+      const parsed = chatRequestSchema.safeParse(request.body);
+      if (!parsed.success) { response.status(400).json({ error: "Invalid request.", details: parsed.error.issues.map((issue) => issue.message) }); return; }
+      if (!deps.chatApiKey && !deps.chatRoute) { response.status(503).json({ error: "The chat endpoint is not configured." }); return; }
+
+      const catalog = buildCatalog(await deps.store.approved());
+      // Chat runs headless through the shared runner and awaits its result so the
+      // reply can be formatted; its evidence lands on disk like any other run.
+      const chatExecute: CapabilityExecutor = async (reference, params, executeOptions) => {
+        const outcome = await execute({
+          reference, params, runId: createRunId("replay"), runRoot, headless: true,
+          ...(executeOptions?.confirmMutations ? { confirmMutations: true } : {})
+        });
+        return outcome.result;
+      };
+
+      const result = await chat({
+        message: parsed.data.message,
+        catalog,
+        execute: chatExecute,
+        apiKey: deps.chatApiKey ?? "",
+        ...(deps.chatModel ? { model: deps.chatModel } : {}),
+        ...(parsed.data.confirm !== undefined ? { confirm: parsed.data.confirm } : {}),
+        ...(deps.chatRoute ? { route: deps.chatRoute } : {})
+      });
+      response.json(result);
     } catch (error) { next(error); }
   });
 

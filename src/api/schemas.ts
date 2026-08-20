@@ -40,3 +40,15 @@ export type RunRequest = z.infer<typeof runRequestSchema>;
 
 // POST /api/interventions/:id/take
 export const takeControlSchema = z.object({ operator: z.string().min(1) }).strict();
+
+// POST /api/chat. A message, and an optional confirmation the user gives before
+// a data-changing capability runs - deliberately its own envelope field, never
+// something the model can set.
+export const chatRequestSchema = z
+  .object({
+    message: z.string().min(1).max(2000),
+    confirm: z.boolean().optional()
+  })
+  .strict();
+
+export type ChatRequest = z.infer<typeof chatRequestSchema>;
