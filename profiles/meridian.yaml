@@ -35,6 +35,15 @@ credentials:
 irreversible_actions:
   - "Post Transfer"
   - "Apply Hold"
+# Fault kinds MERIDIAN simulates via ?inject=<kind> (from its own Settings page).
+# The API only accepts a value from this list, and applies it to the entry URL.
+fault_injection:
+  - "validation"
+  - "notfound"
+  - "permission"
+  - "timeout"
+  - "maintenance"
+  - "server"
 detectors:
   session_lost:
     paths: ["/signon"]

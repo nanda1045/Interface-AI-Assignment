@@ -41,9 +41,20 @@ export interface CapabilityRunOptions {
   /** Named credential set from the app profile; triggers a real sign-on before
    *  replay. The alternative for the fictional target is --mock-auth. */
   auth?: string;
+  /** Demo-only fault to force on the capability's entry page, via the app's
+   *  ?inject= mechanism. Trusted runner code applies it to the entry URL only;
+   *  it must be a kind the app profile allow-lists. Recorded in evidence. */
+  faultInjection?: string;
   /** Observability hooks for a service wrapping this runner. Kept as callbacks
    *  so the runner itself stays free of any server or queue concern. */
   onStarted?: (detail: { reference: string }) => void;
+  /** When a handoff run creates its control coordinator, hand it to the caller
+   *  so a shared operator console (the API/dashboard) can serve interventions
+   *  instead of the runner starting a competing one. */
+  onController?: (controller: RunController) => void;
+  /** The runner starts its own local operator console by default. A service
+   *  that already hosts the intervention UI sets this false to avoid two. */
+  startConsole?: boolean;
 }
 
 export interface CapabilityRunOutcome {
@@ -77,6 +88,19 @@ export async function runCapability(options: CapabilityRunOptions): Promise<Capa
     : options.policy ?? "policies/default.yaml";
   if (options.handoff && headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
 
+  // A demo fault is applied here, in trusted code, to the entry URL only - never
+  // taken from a capability argument. It must be a kind the profile allow-lists,
+  // so a caller can only request a fault the target actually simulates.
+  if (options.faultInjection) {
+    const allowed = profile?.fault_injection ?? [];
+    if (!allowed.includes(options.faultInjection)) {
+      throw new Error(`Fault "${options.faultInjection}" is not in ${artifact.capability.app.id}'s allow-list (${allowed.join(", ") || "none"}).`);
+    }
+    const injected = new URL(artifact.entry.url);
+    injected.searchParams.set("inject", options.faultInjection);
+    artifact = { ...artifact, entry: { ...artifact.entry, url: injected.toString() } };
+  }
+
   // Create the real browser session. Mock authentication is deliberately
   // restricted to the two fictional localhost tenants.
   const browser = await chromium.launch({ headless });
@@ -97,9 +121,12 @@ export async function runCapability(options: CapabilityRunOptions): Promise<Capa
   // this one browser session. The lease prevents agent and human acting together.
   const logger = new RunLogger(options.runId, runRoot);
   await logger.initialize();
+  if (options.faultInjection) await logger.event({ type: "fault_injected", kind: options.faultInjection, url: artifact.entry.url });
   const controller = options.handoff ? new RunController(logger) : undefined;
+  if (controller) options.onController?.(controller);
   const surface = new WebSurface(page, { browser, context, ...(controller ? { canAgentAct: () => controller.lease.agentCanAct() } : {}) });
-  const consoleServer = controller ? await startConsole(controller, Number(options.consolePort ?? 4590)) : undefined;
+  const startOwnConsole = controller && (options.startConsole ?? true);
+  const consoleServer = startOwnConsole ? await startConsole(controller, Number(options.consolePort ?? 4590)) : undefined;
   if (controller) {
     await installHumanRecorder(page, controller, logger);
     console.error(`Operator console: http://127.0.0.1:${options.consolePort ?? 4590}`);

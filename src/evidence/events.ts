@@ -24,6 +24,9 @@ export type RunEvent =
   | { type: "signed_on"; operator: string; app: string }
   | { type: "human_step_recorded"; step: number; action: AbstractAction }
   | { type: "stopped"; reason: string }
+  // A demo fault forced on the entry URL by trusted runner code. Recorded so
+  // the evidence explains any resulting business outcome or failure.
+  | { type: "fault_injected"; kind: string; url: string }
   | { type: "result"; status: "success" | "business_outcome" | "escalated" | "failure"; detail: unknown };
 
 export type PersistedRunEvent = RunEvent & { at: string; runId: string };

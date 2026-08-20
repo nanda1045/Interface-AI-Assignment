@@ -72,6 +72,10 @@ export const appProfileSchema = strict({
   // the profile can, and discovery uses this to stop the model and record a
   // human_required boundary instead of executing the action.
   irreversible_actions: z.array(z.string()).optional(),
+  // The exact fault kinds this app understands via its ?inject= query parameter.
+  // The API rejects anything outside this allow-list, so a caller can only ask
+  // for a fault the target actually simulates - never an arbitrary URL suffix.
+  fault_injection: z.array(z.string()).optional(),
   detectors: detectorSignaturesSchema,
   outcome_templates: z.array(outcomeTemplateSchema),
   recovery_templates: z.array(recoveryTemplateSchema)
