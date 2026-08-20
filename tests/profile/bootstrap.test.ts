@@ -55,6 +55,7 @@ class SignonSurface implements Surface {
 
   public async captureLocators(): Promise<LocatorBundle> { throw new Error("not used"); }
   public async read() { return { text: "" }; }
+  public async readTable() { return { headers: [], rows: [] }; }
   public async snapshotDom() { return "<html></html>"; }
   public async close() {}
 }

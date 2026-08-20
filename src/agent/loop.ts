@@ -25,11 +25,19 @@ export interface RecordedStep {
 
 // Discovery has three explicit terminal states and returns verified output
 // locations rather than persisting the output values seen in this run.
+/** What discovery captured for one marked output: how to find it again, and -
+ *  when the marked element was a table - the headers that give its columns
+ *  meaning. Structured rows become typed data at distillation. */
+export interface MarkedOutput {
+  locators: LocatorBundle;
+  table?: { headers: string[] };
+}
+
 export interface DiscoveryResult {
   status: "success" | "escalated" | "failure";
   runId: string;
   steps: RecordedStep[];
-  outputs: Record<string, LocatorBundle>;
+  outputs: Record<string, MarkedOutput>;
   reason?: string;
 }
 
@@ -65,7 +73,7 @@ export async function runDiscovery(options: {
 }): Promise<DiscoveryResult> {
   const { goal, target, surface, policy, llm, logger } = options;
   const steps: RecordedStep[] = [];
-  const outputs: Record<string, LocatorBundle> = {};
+  const outputs: Record<string, MarkedOutput> = {};
   const history: { decision: string; result: string }[] = [];
   const hashVisits = new Map<string, number>();
   let duplicateOutputMarks = 0;
@@ -143,10 +151,22 @@ export async function runDiscovery(options: {
         continue;
       }
       const locators = await surface.captureLocators(decision.ref);
-      const outputValue = await surface.read(decision.ref);
-      logger.markSensitive(outputValue.text);
-      if (outputValue.value) logger.markSensitive(outputValue.value);
-      outputs[decision.name] = locators;
+      const markedElement = observation.elements.find((element) => element.ref === decision.ref);
+      if (markedElement?.role === "table") {
+        // A table output: capture its headers so distillation can type the
+        // columns, and register every meaningful cell as sensitive - rows are
+        // customer data even though no single cell was individually marked.
+        // Very short cells ("2", "OK") are skipped: registering them would
+        // redact every occurrence of that fragment across the whole log.
+        const snapshot = await surface.readTable(decision.ref);
+        for (const row of snapshot.rows) for (const cell of row) if (cell.trim().length >= 4) logger.markSensitive(cell.trim());
+        outputs[decision.name] = { locators, table: { headers: snapshot.headers } };
+      } else {
+        const outputValue = await surface.read(decision.ref);
+        logger.markSensitive(outputValue.text);
+        if (outputValue.value) logger.markSensitive(outputValue.value);
+        outputs[decision.name] = { locators };
+      }
       await logger.event({ type: "output_marked", step, name: decision.name, locators });
       if (options.expectedOutputs?.length && options.expectedOutputs.every((name) => outputs[name])) {
         return finish("success", "Every declared output was visibly marked.");

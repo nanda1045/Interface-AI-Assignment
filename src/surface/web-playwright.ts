@@ -156,6 +156,25 @@ export class WebSurface implements Surface {
 
   // Capture every frame's HTML for failure evidence. RunLogger performs the
   // retrospective sensitive-value redaction before the evidence is final.
+  // Headers come from the first row containing th cells (or the first row when
+  // a legacy table has none); every later row's td texts become one entry.
+  public async readTable(ref: ElementRef): Promise<{ headers: string[]; rows: string[][] }> {
+    const locator = await this.locatorForRef(ref);
+    return locator.evaluate((element) => {
+      const clean = (value: string | null | undefined): string => (value ?? "").replace(/\s+/g, " ").trim();
+      const table = element as HTMLTableElement;
+      const allRows = [...table.rows];
+      if (allRows.length === 0) return { headers: [], rows: [] };
+      const headerRowIndex = allRows.findIndex((row) => row.querySelector("th") !== null);
+      const headerRow = allRows[headerRowIndex === -1 ? 0 : headerRowIndex]!;
+      const headers = [...headerRow.cells].map((cell) => clean(cell.textContent));
+      const bodyRows = allRows
+        .filter((row, index) => index !== (headerRowIndex === -1 ? 0 : headerRowIndex))
+        .map((row) => [...row.cells].map((cell) => clean(cell.textContent)));
+      return { headers, rows: bodyRows };
+    });
+  }
+
   public async snapshotDom(): Promise<string> {
     const snapshots = await Promise.all(this.page.frames().map(async (frame) => `<!-- frame:${getFramePath(frame)} url:${frame.url()} -->\n${await frame.content()}`));
     return snapshots.join("\n");

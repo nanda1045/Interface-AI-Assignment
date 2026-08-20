@@ -19,6 +19,19 @@ export const targetSchema = strict({ frame: z.string().optional(), strategies: z
 
 // Small JSON-like contracts describe accepted invocation inputs and returned
 // outputs, including sensitivity and parsing-format metadata.
+// Structured tabular output: an array of uniform objects with scalar fields,
+// extracted deterministically from a table element. Inputs never take this
+// shape - the engine rejects an array-typed input contract by name.
+const tablePropertySchemaFactory = () => strict({
+  type: z.literal("array"),
+  description: z.string().optional(),
+  sensitive: z.boolean().optional(),
+  items: strict({
+    type: z.literal("object"),
+    properties: z.record(z.string(), jsonPropertySchema)
+  })
+});
+
 const jsonPropertySchema = strict({
   type: z.enum(["string", "number", "integer", "boolean"]),
   description: z.string().optional(),
@@ -27,10 +40,12 @@ const jsonPropertySchema = strict({
   "x-format": z.string().optional()
 });
 
+const tablePropertySchema = tablePropertySchemaFactory();
+
 export const objectContractSchema = strict({
   type: z.literal("object"),
   required: z.array(z.string()),
-  properties: z.record(z.string(), jsonPropertySchema)
+  properties: z.record(z.string(), z.union([jsonPropertySchema, tablePropertySchema]))
 }).superRefine((contract, context) => {
   // A required name must also have a declared property schema.
   for (const required of contract.required) {
@@ -131,7 +146,14 @@ export const capabilityArtifactSchema = strict({
   }),
   steps: z.array(stepSchema).min(1),
   checkpoint: strict({ assert: z.array(predicateSchema).min(1) }),
-  extract: z.array(strict({ output: z.string(), from: targetSchema, parse: z.enum(["text", "currency", "number"]) })),
+  extract: z.array(strict({
+    output: z.string(),
+    from: targetSchema,
+    parse: z.enum(["text", "currency", "number", "table"]),
+    // Table extraction maps live header text to declared item properties, so a
+    // reordered column keeps its meaning and a missing one fails loudly.
+    columns: z.array(strict({ header: z.string(), property: z.string() })).optional()
+  })),
   outcomes: z.array(strict({ code: z.string().regex(/^[A-Z][A-Z0-9_]*$/), at_steps: z.array(z.string()), when: z.array(predicateSchema).min(1), returns: z.record(z.string(), z.unknown()).optional() })),
   recovery: z.array(recoverySchema),
   policy: strict({ allowed_origins: z.array(z.string().url()).min(1), allowed_actions: z.array(z.enum(["navigate", "click", "focus", "type", "select", "press", "scroll"])), max_duration_ms: z.number().int().positive() })

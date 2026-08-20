@@ -36,6 +36,7 @@ class FakeSurface implements Surface {
   public async captureLocators(): Promise<LocatorBundle> { return bundle; }
   public async resolve() { return { ok: false as const, reason: "target_not_found" as const, attempts: [] }; }
   public async read() { return { text: "$2,481.13" }; }
+  public async readTable() { return { headers: [], rows: [] }; }
   public async snapshotDom() { return "<html></html>"; }
   public async close() {}
 }
@@ -131,7 +132,7 @@ describe("runDiscovery", () => {
       expectedOutputs: ["member_name"]
     });
 
-    expect(result).toMatchObject({ status: "success", outputs: { member_name: bundle } });
+    expect(result).toMatchObject({ status: "success", outputs: { member_name: { locators: bundle } } });
   });
 
   it("pauses a stuck discovery into human handoff and resumes the loop", async () => {

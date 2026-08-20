@@ -30,6 +30,8 @@ function validateInputs(artifact: CapabilityArtifact, params: Record<string, unk
   for (const required of artifact.inputs.required) if (!(required in params)) return `Missing required parameter: ${required}`;
   for (const name of Object.keys(params)) if (!(name in artifact.inputs.properties)) return `Unknown parameter: ${name}`;
   for (const [name, schema] of Object.entries(artifact.inputs.properties)) {
+    // Structured tables exist only as outputs; an invocation cannot supply one.
+    if (schema.type === "array") return `${name} is a structured output contract and cannot be an invocation input.`;
     const value = params[name];
     if (value === undefined) continue;
     if (schema.type === "string" && typeof value !== "string") return `${name} must be a string.`;
@@ -316,6 +318,26 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     lastAttempts = resolution.attempts;
     if (!resolution.ok) return fail("target_not_found", `Extraction target for ${extraction.output}.`, "Extraction locator ladder was exhausted.");
     recordTier(stats, `extract:${extraction.output}`, resolution);
+    if (extraction.parse === "table") {
+      // Columns are matched by live header text, so a reordered table keeps its
+      // meaning and a renamed or missing column fails loudly instead of
+      // silently shifting every value one place over.
+      const snapshot = await surface.readTable(resolution.ref);
+      const headerIndex = new Map(snapshot.headers.map((header, index) => [header.trim().toLowerCase(), index]));
+      const columns = extraction.columns ?? [];
+      const missing = columns.filter((column) => !headerIndex.has(column.header.trim().toLowerCase()));
+      if (missing.length > 0) {
+        return fail("postcondition_failed", `Table columns for ${extraction.output}: ${columns.map((column) => column.header).join(", ")}.`, `Columns not present: ${missing.map((column) => column.header).join(", ")}.`);
+      }
+      const rows = snapshot.rows.map((row) => Object.fromEntries(columns.map((column) => [column.property, row[headerIndex.get(column.header.trim().toLowerCase())!] ?? ""])));
+      if (artifact.outputs.properties[extraction.output]?.sensitive) {
+        // Same guard as capture: registering very short fragments would redact
+        // every occurrence of them across the whole evidence file.
+        for (const row of rows) for (const value of Object.values(row)) if (String(value).trim().length >= 4) logger.markSensitive(String(value).trim());
+      }
+      outputs[extraction.output] = rows;
+      continue;
+    }
     const raw = (await surface.read(resolution.ref)).text;
     outputs[extraction.output] = extraction.parse === "number" ? Number(raw.replace(/[^0-9.-]/g, "")) : raw;
     if (artifact.outputs.properties[extraction.output]?.sensitive) logger.markSensitive(String(outputs[extraction.output]));

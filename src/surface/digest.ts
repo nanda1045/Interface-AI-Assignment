@@ -23,6 +23,9 @@ const digestSelector = [
   "h1",
   "h2",
   "h3",
+  // Tables are observable as whole elements so a model can mark one as an
+  // output; their cells stay individually observable for label heuristics.
+  "table",
   "th",
   "td",
   "[aria-live]",
@@ -62,6 +65,7 @@ export async function digestFrame(frame: Frame, observationId: string): Promise<
       if (tag === "select") return "combobox";
       if (tag === "textarea") return "textbox";
       if (tag === "h1" || tag === "h2" || tag === "h3") return "heading";
+      if (tag === "table") return "table";
       if (tag === "th") return "columnheader";
       if (tag === "td") return "cell";
       if (tag === "input") {

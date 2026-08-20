@@ -31,11 +31,15 @@ function toJsonSchema(contract: ObjectContract): CapabilityTool["input_schema"] 
     type: "object",
     required: [...contract.required],
     properties: Object.fromEntries(
-      Object.entries(contract.properties).map(([name, property]) => [name, {
-        type: property.type,
-        ...(property.description ? { description: property.description } : {}),
-        ...(property.pattern ? { pattern: property.pattern } : {})
-      }])
+      Object.entries(contract.properties).map(([name, property]) => [name, property.type === "array"
+        // Never legitimate for inputs - the engine rejects array-typed inputs -
+        // but the projection must not crash on a malformed contract.
+        ? { type: "array", ...(property.description ? { description: property.description } : {}) }
+        : {
+          type: property.type,
+          ...(property.description ? { description: property.description } : {}),
+          ...(property.pattern ? { pattern: property.pattern } : {})
+        }])
     )
   };
 }
@@ -44,7 +48,9 @@ function toJsonSchema(contract: ObjectContract): CapabilityTool["input_schema"] 
 // described in prose. A model that knows what it will receive picks better.
 function describeOutputs(outputs: ObjectContract): string {
   const described = Object.entries(outputs.properties)
-    .map(([name, property]) => `${name} (${property["x-format"] ?? property.type})`)
+    .map(([name, property]) => property.type === "array"
+      ? `${name} (table of ${Object.keys(property.items.properties).join(", ")})`
+      : `${name} (${property["x-format"] ?? property.type})`)
     .join(", ");
   return described ? ` Returns: ${described}.` : "";
 }

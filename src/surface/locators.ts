@@ -101,7 +101,7 @@ export async function captureLocatorBundle(frame: Frame, element: DigestElement)
   const attributes = await source.evaluate((node) => ({ id: node.getAttribute("id"), name: node.getAttribute("name") }));
 
   // Strongest strategy: exact accessibility role and accessible name.
-  if (element.role && element.name && !["cell", "columnheader", "text"].includes(element.role)) {
+  if (element.role && element.name && !["cell", "columnheader", "text", "table"].includes(element.role)) {
     const candidate = frame.getByRole(element.role as Parameters<Frame["getByRole"]>[0], { name: element.name, exact: true });
     if (await sameNode(candidate, localRef)) strategies.push({ kind: "role_name", role: element.role, name: element.name, frame: framePath, unique: true, confidence: 0.9 });
   }

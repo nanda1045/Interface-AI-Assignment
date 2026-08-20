@@ -4,7 +4,7 @@ import type { DiscoveryResult } from "../../src/agent/loop.js";
 
 const locator = { capturedAt: "2026-08-13T00:00:00.000Z", strategies: [{ kind: "attr_css" as const, value: "input[name='f_mno']", frame: "workarea", unique: true as const, confidence: 0.7 }] };
 const result: DiscoveryResult = {
-  status: "success", runId: "disc_test", outputs: { savings_balance: locator },
+  status: "success", runId: "disc_test", outputs: { savings_balance: { locators: locator } },
   steps: [{ step: 1, reasoning: "Enter member", action: { kind: "type", ref: "e1", text: "4521", sensitive: true }, locators: locator, beforeUrl: "http://localhost:4478/desk", afterUrl: "http://localhost:4478/desk" }]
 };
 const options = {
@@ -109,10 +109,30 @@ describe("distillDiscovery", () => {
     expect(plain.outcomes.map((outcome) => outcome.code)).toEqual(["MEMBER_NOT_FOUND", "PERMISSION_DENIED"]);
   });
 
+  it("turns a marked table into a typed array output with column mapping", () => {
+    const artifact = distillDiscovery(
+      { ...result, outputs: { matches: { locators: locator, table: { headers: ["Member No.", "Name", "Shares"] } } } },
+      { ...options, outputs: { type: "object", required: ["matches"], properties: { matches: { type: "string", sensitive: true } } } }
+    );
+    const declared = artifact.outputs.properties.matches;
+    expect(declared).toMatchObject({ type: "array", sensitive: true });
+    if (declared?.type !== "array") throw new Error("expected an array contract");
+    expect(Object.keys(declared.items.properties)).toEqual(["member_no", "name", "shares"]);
+    expect(artifact.extract[0]).toMatchObject({
+      output: "matches",
+      parse: "table",
+      columns: [
+        { header: "Member No.", property: "member_no" },
+        { header: "Name", property: "name" },
+        { header: "Shares", property: "shares" }
+      ]
+    });
+  });
+
   it("refuses the artifact when run data emptied a ladder", () => {
     expect(() => distillDiscovery(runWith({ locators: bundle(roleName("View account 4521-01")) }), options))
       .toThrow(/step 1 was built from run-specific data/);
-    expect(() => distillDiscovery(runWith({ outputs: { savings_balance: bundle(roleName("Balance for Alex Testman")) } }), { ...options, sensitiveValues: ["Alex Testman"] }))
+    expect(() => distillDiscovery(runWith({ outputs: { savings_balance: { locators: bundle(roleName("Balance for Alex Testman")) } } }), { ...options, sensitiveValues: ["Alex Testman"] }))
       .toThrow(/extraction of savings_balance was built from run-specific data/);
   });
 });

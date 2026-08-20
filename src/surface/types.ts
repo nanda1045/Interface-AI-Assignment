@@ -118,6 +118,10 @@ export interface Surface {
   captureLocators(ref: ElementRef): Promise<LocatorBundle>;
   resolve(target: TargetSpec): Promise<ResolvedElement | ResolutionFailure>;
   read(ref: ElementRef): Promise<{ text: string; value?: string }>;
+  /** Deterministic tabular read of a table element: header texts and body rows.
+   *  This is how search results and share listings become structured outputs
+   *  instead of model-parsed prose. */
+  readTable(ref: ElementRef): Promise<{ headers: string[]; rows: string[][] }>;
   snapshotDom(): Promise<string>;
   close(): Promise<void>;
 }

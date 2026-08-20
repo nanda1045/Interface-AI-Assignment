@@ -117,6 +117,18 @@ function bindAction(action: AbstractAction, params: Record<string, string>, used
 
 // Compile one recorded action into an artifact step with safe intent text,
 // durable target, wait rule, and deterministic postconditions.
+// Header text becomes a property name: "Member No." -> member_no. Duplicates
+// and empty headers get positional names so every column stays addressable.
+function columnsFor(headers: string[]): { header: string; property: string }[] {
+  const used = new Set<string>();
+  return headers.map((header, index) => {
+    let property = header.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || `column_${index + 1}`;
+    while (used.has(property)) property = `${property}_${index + 1}`;
+    used.add(property);
+    return { header, property };
+  });
+}
+
 function distillStep(
   recorded: RecordedStep,
   index: number,
@@ -175,11 +187,17 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
 
   // Output extraction also uses taint-safe locator ladders. Parsing behaviour is
   // derived from the declared output contract, not from model reasoning.
-  const extract = outputEntries.map(([output, bundle]) => ({
-    output,
-    from: untaintedTarget(bundle, tainted, `extraction of ${output}`),
-    parse: options.outputs.properties[output]?.["x-format"] === "usd-currency" ? "currency" as const : "text" as const
-  }));
+  const extract = outputEntries.map(([output, marked]) => {
+    const from = untaintedTarget(marked.locators, tainted, `extraction of ${output}`);
+    if (marked.table) {
+      // Column mapping is captured from the live table's own headers, so the
+      // artifact says what each column means and replay can survive reordering.
+      return { output, from, parse: "table" as const, columns: columnsFor(marked.table.headers) };
+    }
+    const declared = options.outputs.properties[output];
+    const currency = declared && declared.type !== "array" && declared["x-format"] === "usd-currency";
+    return { output, from, parse: currency ? "currency" as const : "text" as const };
+  });
 
   // Known bounded recovery is explicit in the artifact rather than improvised by
   // the model during replay. Templates come from the app profile at authoring
@@ -195,6 +213,19 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
   ])];
   const undeclared = extract.map((item) => item.output).filter((output) => !(output in options.outputs.properties));
   if (undeclared.length > 0) throw new Error(`Marked outputs are not declared in the output contract: ${undeclared.join(", ")}`);
+
+  // A table output's declared scalar placeholder becomes a typed array contract
+  // built from the captured headers, preserving the declared sensitivity. The
+  // caller declares THAT an output exists; the capture says what shape it has.
+  const outputContract: ObjectContract = {
+    ...options.outputs,
+    properties: Object.fromEntries(Object.entries(options.outputs.properties).map(([name, declared]) => {
+      const marked = result.outputs[name];
+      if (!marked?.table) return [name, declared];
+      const items = Object.fromEntries(columnsFor(marked.table.headers).map((column) => [column.property, { type: "string" as const }]));
+      return [name, { type: "array" as const, ...(declared.sensitive ? { sensitive: true } : {}), items: { type: "object" as const, properties: items } }];
+    }))
+  };
   const origin = new URL(options.entryUrl).origin;
 
   // Construct the complete draft, including provenance, business outcomes,
@@ -221,7 +252,7 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
       }
     },
     inputs: options.inputs,
-    outputs: options.outputs,
+    outputs: outputContract,
     entry: { url: options.entryUrl, preconditions: [{ kind: "authenticated", via: options.authenticatedVia ?? "mock-auth or an existing teller session" }] },
     steps,
     checkpoint: { assert: extract.map((item) => ({ kind: "element_present" as const, target: item.from })) },

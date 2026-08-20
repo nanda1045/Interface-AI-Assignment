@@ -20,6 +20,11 @@ beforeAll(async () => {
         <table><tr><td>Regular Savings</td><td>$2,481.13</td></tr></table>
         <a href='#member'>Open Member</a>
         <button>Search</button>
+        <table id='results'>
+          <tr><th>Member No.</th><th>Name</th><th>Shares</th></tr>
+          <tr><td>100234</td><td>Lovelace, Ada</td><td>2</td></tr>
+          <tr><td>100987</td><td>Hopper, Grace</td><td>3</td></tr>
+        </table>
       </body></html>
     "></iframe>
   `);
@@ -32,6 +37,15 @@ afterAll(async () => {
 });
 
 describe("WebSurface", () => {
+  it("observes tables as elements and reads them as structured rows", async () => {
+    const observation = await surface.observe();
+    const table = observation.elements.find((element) => element.role === "table" && element.text?.includes("Lovelace"));
+    expect(table).toBeDefined();
+    const snapshot = await surface.readTable(table!.ref);
+    expect(snapshot.headers).toEqual(["Member No.", "Name", "Shares"]);
+    expect(snapshot.rows).toEqual([["100234", "Lovelace, Ada", "2"], ["100987", "Hopper, Grace", "3"]]);
+  });
+
   it("builds a frame-aware digest with labels inferred from table proximity", async () => {
     const observation = await surface.observe({ screenshot: true });
     const field = observation.elements.find((element) => element.hints.nearLabel === "Member No.");

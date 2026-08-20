@@ -25,6 +25,7 @@ class ErrorSurface implements Surface {
   public async captureLocators(): Promise<LocatorBundle> { throw new Error("not used"); }
   public async resolve(_target: TargetSpec) { return { ok: true as const, ref: "submit", frame: "main", matchedStrategy: target.strategies[0]!, tier: 1, attempts: [{ strategy: target.strategies[0]!, matched: 1 }] }; }
   public async read() { return { text: "" }; }
+  public async readTable() { return { headers: [], rows: [] }; }
   public async snapshotDom() { return "<html><h1>Unexpected Application Error</h1><p>member 4521</p></html>"; }
   public async close() {}
 }
@@ -45,6 +46,7 @@ class SupervisorWallSurface implements Surface {
   public async captureLocators(): Promise<LocatorBundle> { throw new Error("not used"); }
   public async resolve(_target: TargetSpec) { return { ok: false as const, reason: "target_not_found" as const, attempts: [] }; }
   public async read() { return { text: "" }; }
+  public async readTable() { return { headers: [], rows: [] }; }
   public async snapshotDom() { return "<html><h1>Supervisor override required</h1></html>"; }
   public async close() {}
 }
