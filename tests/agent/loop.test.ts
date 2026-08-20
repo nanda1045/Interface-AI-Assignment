@@ -36,7 +36,7 @@ class FakeSurface implements Surface {
   public async captureLocators(): Promise<LocatorBundle> { return bundle; }
   public async resolve() { return { ok: false as const, reason: "target_not_found" as const, attempts: [] }; }
   public async read() { return { text: "$2,481.13" }; }
-  public async readTable() { return { headers: [], rows: [] }; }
+  public async readTable() { return { headers: [], rows: [], hasHeaderRow: false }; }
   public async snapshotDom() { return "<html></html>"; }
   public async close() {}
 }
@@ -275,6 +275,35 @@ describe("runDiscovery", () => {
 
     expect(result).toMatchObject({ status: "success" });
     expect(Object.keys(result.outputs)).toEqual(["member_name"]);
+  });
+
+  it("captures a headerless details panel as scalar text, not a mis-parsed table", async () => {
+    // MERIDIAN's TRANSFER POSTED screen is an HTML table with no th header row:
+    // its first row is "Confirmation:" / "CN480101" - values, not headers.
+    // Treating them as columns froze this run's confirmation number into the
+    // artifact as a column name and broke every later replay.
+    class DetailsPanelSurface extends FakeSurface {
+      public override async observe(): Promise<Observation> {
+        return {
+          url: "http://localhost:4478/desk", title: "CorePoint", frames: [{ path: "main", url: "http://localhost:4478/desk" }],
+          elements: [{ ref: "panel", frame: "main", role: "table", name: "Confirmation: CN480101", text: "Confirmation: CN480101", state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.5, 0.3], hints: {} }],
+          stateHash: "posted"
+        };
+      }
+      public override async readTable() { return { headers: ["Confirmation:", "CN480101"], rows: [], hasHeaderRow: false }; }
+      public override async read() { return { text: "Confirmation: CN480101 Amount: $1.00" }; }
+    }
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const llm = new SequenceClient([
+      { kind: "note_output", ref: "panel", name: "confirmation", reasoning: "Mark the confirmation." },
+      { kind: "finish", reasoning: "Done." }
+    ]);
+    const result = await runDiscovery({ goal: "Read the confirmation", target: "http://localhost:4478/desk", surface: new DetailsPanelSurface(), policy: new PolicyEngine(config), llm, logger: new RunLogger("disc_panel", root) });
+    expect(result.status).toBe("success");
+    // Scalar: no frozen table headers.
+    expect(result.outputs.confirmation?.table).toBeUndefined();
+    expect(result.outputs.confirmation?.locators).toBeDefined();
   });
 
   it("finishes when every declared output has been visibly marked", async () => {

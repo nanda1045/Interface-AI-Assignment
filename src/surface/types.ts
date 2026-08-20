@@ -124,7 +124,7 @@ export interface Surface {
   /** Deterministic tabular read of a table element: header texts and body rows.
    *  This is how search results and share listings become structured outputs
    *  instead of model-parsed prose. */
-  readTable(ref: ElementRef): Promise<{ headers: string[]; rows: string[][] }>;
+  readTable(ref: ElementRef): Promise<{ headers: string[]; rows: string[][]; hasHeaderRow: boolean }>;
   snapshotDom(): Promise<string>;
   close(): Promise<void>;
 }

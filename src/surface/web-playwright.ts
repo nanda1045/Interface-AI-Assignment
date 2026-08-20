@@ -158,20 +158,24 @@ export class WebSurface implements Surface {
   // retrospective sensitive-value redaction before the evidence is final.
   // Headers come from the first row containing th cells (or the first row when
   // a legacy table has none); every later row's td texts become one entry.
-  public async readTable(ref: ElementRef): Promise<{ headers: string[]; rows: string[][] }> {
+  public async readTable(ref: ElementRef): Promise<{ headers: string[]; rows: string[][]; hasHeaderRow: boolean }> {
     const locator = await this.locatorForRef(ref);
     return locator.evaluate((element) => {
       const clean = (value: string | null | undefined): string => (value ?? "").replace(/\s+/g, " ").trim();
       const table = element as HTMLTableElement;
       const allRows = [...table.rows];
-      if (allRows.length === 0) return { headers: [], rows: [] };
+      if (allRows.length === 0) return { headers: [], rows: [], hasHeaderRow: false };
+      // A genuine header row has th cells. A legacy grid without one (a
+      // confirmation details panel) has a first row of VALUES, not headers -
+      // hasHeaderRow lets callers refuse to treat those values as columns.
       const headerRowIndex = allRows.findIndex((row) => row.querySelector("th") !== null);
-      const headerRow = allRows[headerRowIndex === -1 ? 0 : headerRowIndex]!;
+      const hasHeaderRow = headerRowIndex !== -1;
+      const headerRow = allRows[hasHeaderRow ? headerRowIndex : 0]!;
       const headers = [...headerRow.cells].map((cell) => clean(cell.textContent));
       const bodyRows = allRows
-        .filter((row, index) => index !== (headerRowIndex === -1 ? 0 : headerRowIndex))
+        .filter((_, index) => index !== (hasHeaderRow ? headerRowIndex : 0))
         .map((row) => [...row.cells].map((cell) => clean(cell.textContent)));
-      return { headers, rows: bodyRows };
+      return { headers, rows: bodyRows, hasHeaderRow };
     });
   }
 

@@ -30,7 +30,7 @@ class ResultsSurface implements Surface {
   }
   public async captureLocators(): Promise<LocatorBundle> { throw new Error("not used"); }
   public async read() { return { text: "" }; }
-  public async readTable() { return { headers: this.headers, rows: this.rows }; }
+  public async readTable() { return { headers: this.headers, rows: this.rows, hasHeaderRow: true }; }
   public async snapshotDom() { return "<html></html>"; }
   public async close() {}
 }

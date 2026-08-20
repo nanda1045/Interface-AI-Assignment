@@ -14,8 +14,8 @@
     "status": "draft",
     "provenance": {
       "discovered_by": "gpt-5.6-luna",
-      "discovery_run": "disc_20260820T201445Z",
-      "recorded_at": "2026-08-20T20:16:12.582Z",
+      "discovery_run": "disc_20260820T202218Z",
+      "recorded_at": "2026-08-20T20:23:25.284Z",
       "approved_by": null,
       "approved_at": null,
       "input_fingerprint": {
@@ -42,11 +42,11 @@
       },
       "from_share": {
         "type": "string",
-        "sensitive": false
+        "sensitive": true
       },
       "to_share": {
         "type": "string",
-        "sensitive": false
+        "sensitive": true
       },
       "amount": {
         "type": "string",
@@ -70,7 +70,7 @@
               "type": "string",
               "sensitive": true
             },
-            "cn480097": {
+            "cn480101": {
               "type": "string",
               "sensitive": true
             }
@@ -532,8 +532,8 @@
           "property": "confirmation"
         },
         {
-          "header": "CN480097",
-          "property": "cn480097"
+          "header": "CN480101",
+          "property": "cn480101"
         }
       ]
     }

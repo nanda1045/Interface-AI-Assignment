@@ -60,7 +60,7 @@ class MaintenanceSurface implements Surface {
 
   public async captureLocators(): Promise<LocatorBundle> { throw new Error("not used"); }
   public async read() { return { text: "value" }; }
-  public async readTable() { return { headers: [], rows: [] }; }
+  public async readTable() { return { headers: [], rows: [], hasHeaderRow: false }; }
   public async snapshotDom() { return "<html></html>"; }
   public async close() {}
 }
@@ -131,7 +131,7 @@ class MutationThenMaintenanceSurface implements Surface {
 
   public async captureLocators(): Promise<LocatorBundle> { throw new Error("not used"); }
   public async read() { return { text: "value" }; }
-  public async readTable() { return { headers: [], rows: [] }; }
+  public async readTable() { return { headers: [], rows: [], hasHeaderRow: false }; }
   public async snapshotDom() { return "<html></html>"; }
   public async close() {}
 }

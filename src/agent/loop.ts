@@ -172,16 +172,20 @@ export async function runDiscovery(options: {
       }
       const locators = await surface.captureLocators(decision.ref);
       const markedElement = observation.elements.find((element) => element.ref === decision.ref);
-      if (markedElement?.role === "table") {
-        // A table output: capture its headers so distillation can type the
-        // columns, and register every meaningful cell as sensitive - rows are
-        // customer data even though no single cell was individually marked.
+      const tableSnapshot = markedElement?.role === "table" ? await surface.readTable(decision.ref) : undefined;
+      if (tableSnapshot && tableSnapshot.hasHeaderRow) {
+        // A genuine columnar table: capture its headers so distillation can type
+        // the columns, and register every meaningful cell as sensitive - rows
+        // are customer data even though no single cell was individually marked.
         // Very short cells ("2", "OK") are skipped: registering them would
         // redact every occurrence of that fragment across the whole log.
-        const snapshot = await surface.readTable(decision.ref);
-        for (const row of snapshot.rows) for (const cell of row) if (cell.trim().length >= 4) logger.markSensitive(cell.trim());
-        outputs[decision.name] = { locators, table: { headers: snapshot.headers } };
+        for (const row of tableSnapshot.rows) for (const cell of row) if (cell.trim().length >= 4) logger.markSensitive(cell.trim());
+        outputs[decision.name] = { locators, table: { headers: tableSnapshot.headers } };
       } else {
+        // A headerless grid (a confirmation details panel is an HTML table whose
+        // first row is "Confirmation:  CN..." - values, not headers) is captured
+        // as scalar text. Treating its first row as column headers would freeze
+        // this run's confirmation number into the artifact as a column name.
         const outputValue = await surface.read(decision.ref);
         logger.markSensitive(outputValue.text);
         if (outputValue.value) logger.markSensitive(outputValue.value);

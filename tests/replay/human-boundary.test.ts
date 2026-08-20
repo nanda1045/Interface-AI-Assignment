@@ -52,7 +52,7 @@ class ReviewSurface implements Surface {
 
   public async captureLocators(): Promise<LocatorBundle> { throw new Error("not used"); }
   public async read(ref: string) { return { text: ref === "confirmation" ? "TXN-42" : "" }; }
-  public async readTable() { return { headers: [], rows: [] }; }
+  public async readTable() { return { headers: [], rows: [], hasHeaderRow: false }; }
   public async snapshotDom() { return "<html></html>"; }
   public async close() {}
 }
