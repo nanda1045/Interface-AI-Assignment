@@ -47,10 +47,12 @@ npm run app
 Run the committed discovered capability in terminal 2 with a member different from the discovery input:
 
 ```bash
-npm run cli -- replay lookup_member_savings_balance@1.1.0 \
+npm run cli -- replay lookup_member_savings_balance \
   --param member_id=8832 \
   --mock-auth
 ```
+
+Naming a capability without a version resolves to the newest **approved** one, and the run prints and records which version it selected. A range works too (`@1`, `@1.x`, `@1.2`). Pinning an exact version is an explicit act and reaches a draft, so you can replay something you have just recorded — but a caller that names a capability can never be handed one nobody reviewed.
 
 The browser is headed by default so you can watch it. Add `--headless` for unattended execution. A successful result contains `member_name`, `savings_balance`, locator-tier stability telemetry, and an evidence directory.
 

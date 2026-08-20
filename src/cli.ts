@@ -71,7 +71,11 @@ async function runReplay(options: ReplayRunOptions): Promise<{ result: ReplayRes
   // Load the immutable capability contract, then optionally adapt its approved
   // deployment-specific fields with a tenant overlay.
   const store = new ArtifactStore(options.artifactRoot);
-  let artifact = await store.load(options.reference);
+  // Resolve before loading so an operator watching a run can see which version a
+  // bare name or a range actually selected.
+  const resolved = await store.resolve(options.reference);
+  if (resolved.reference !== options.reference) console.error(`Resolved ${options.reference} to ${resolved.reference}.`);
+  let artifact = await store.load(resolved.reference);
   if (options.overlay) artifact = applyOverlay(artifact, await loadOverlay(options.overlay));
   if (options.handoff && options.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
 

@@ -4,7 +4,10 @@ import type { InterventionRequest } from "../control/intervention.js";
 import type { ControlState } from "../control/lease.js";
 
 export type RunEvent =
-  | { type: "run_started"; goal: string; target: string; model: string }
+  // `capability` is the concrete id@version that ran. A caller may name a
+  // capability without a version, so the evidence has to record which one
+  // resolution actually selected rather than what was asked for.
+  | { type: "run_started"; goal: string; target: string; model: string; capability?: string }
   | { type: "observation"; step: number; url: string; title: string; stateHash: string; elementCount: number; screenshot?: string }
   | { type: "decision"; step: number; reasoning: string; decision: string }
   | { type: "policy_check"; step: number; verdict: PolicyVerdict }

@@ -132,7 +132,13 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       logger.markSensitive(String(params[name]));
     }
   }
-  await logger.event({ type: "run_started", goal: artifact.capability.title, target: artifact.entry.url, model: "deterministic-replay" });
+  await logger.event({
+    type: "run_started",
+    goal: artifact.capability.title,
+    target: artifact.entry.url,
+    model: "deterministic-replay",
+    capability: `${artifact.capability.id}@${artifact.capability.version}`
+  });
 
   // Reject invalid input, unapproved mutation, and unattended irreversible work
   // before the browser performs the capability.
