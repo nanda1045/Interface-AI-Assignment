@@ -18,6 +18,9 @@ export interface RecordedStep {
   locators?: LocatorBundle;
   beforeUrl: string;
   afterUrl: string;
+  /** Set when the model proposed an irreversible action: the target was
+   *  verified and recorded, a human performed it, the model never did. */
+  execution?: "human_required";
 }
 
 // Discovery has three explicit terminal states and returns verified output
@@ -163,6 +166,14 @@ export async function runDiscovery(options: {
     await logger.event({ type: "policy_check", step, verdict });
     if (!verdict.allowed) {
       if (verdict.rule === "irreversible_requires_human") {
+        // Capture the verified target and record the step as human-required
+        // BEFORE control transfers: the human is about to perform it, and the
+        // capability must carry the boundary the model was stopped at.
+        if (options.handoff && "ref" in action) {
+          const locators = await surface.captureLocators(action.ref);
+          steps.push({ step, reasoning: decision.reasoning, action, locators, beforeUrl: observation.url, afterUrl: observation.url, execution: "human_required" });
+          await logger.event({ type: "human_step_recorded", step, action });
+        }
         if (await humanUnblocked(step, observation, verdict.detail, "Perform or decline the irreversible step manually, then hand back.")) continue;
         return finish("escalated", verdict.detail);
       }

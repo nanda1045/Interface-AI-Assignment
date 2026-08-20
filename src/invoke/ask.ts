@@ -92,6 +92,11 @@ export async function ask(options: AskOptions): Promise<AskResult> {
 
   const entry = options.catalog.find((candidate) => candidate.tool.name === invocation.name);
   if (!entry) throw new Error(`The model asked for a capability that is not in the catalog: ${invocation.name}`);
+  if (entry.requires_human) {
+    // Requestable, never satisfiable here: this CLI command runs headless with
+    // no operator attached, and no flag changes that.
+    return { answer: `${entry.reference} is irreversible and only runs with a human boundary attached. Start it with the replay command and --handoff so an operator can complete the final step.` };
+  }
   if (entry.risk !== "read_only" && !options.allowMutations) {
     return { answer: `Answering that would run ${entry.reference}, which changes records. Re-run with --allow-mutations if that is intended.` };
   }

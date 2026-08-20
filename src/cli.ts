@@ -170,11 +170,13 @@ program.command("approve")
   .option("--policy <path>", "policy YAML", "policies/default.yaml")
   .option("--artifact-root <path>", "artifact directory", "artifacts")
   .option("--overlay <path>", "tenant overlay JSON")
+  .option("--handoff", "attach the operator console so a human can complete an irreversible capability's final step", false)
+  .option("--console-port <port>", "operator console port", "4590")
   .option("--headless", "run the validation replay without a visible browser", false)
   .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
   .option("--auth <credentials>", "named credential set from the app profile; performs a real sign-on")
   .option("--run-root <path>", "run evidence directory", "runs")
-  .action(async (reference: string, raw: { by: string; param: string[]; policy: string; artifactRoot: string; overlay?: string; headless: boolean; mockAuth: boolean; auth?: string; runRoot: string }) => {
+  .action(async (reference: string, raw: { by: string; param: string[]; policy: string; artifactRoot: string; overlay?: string; handoff: boolean; consolePort: string; headless: boolean; mockAuth: boolean; auth?: string; runRoot: string }) => {
     const store = new ArtifactStore(raw.artifactRoot);
     const params = parseAssignments(raw.param);
 
@@ -182,6 +184,7 @@ program.command("approve")
     // approval of such capabilities must always use safe test data.
     const validation = await runCapability({
       reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, overlay: raw.overlay,
+      handoff: raw.handoff, consolePort: raw.consolePort,
       headless: raw.headless, mockAuth: raw.mockAuth, auth: raw.auth, runRoot: raw.runRoot, runId: createRunId("approval"),
       confirmMutations: true
     });

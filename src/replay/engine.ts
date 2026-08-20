@@ -152,7 +152,19 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     return fail("policy_blocked", "An approved artifact or interactive mutation confirmation.", "Artifact is draft and no confirmation was supplied.");
   }
   if (artifact.capability.risk === "irreversible") {
-    return fail("policy_blocked", "A human approval intervention.", "Irreversible capabilities cannot run unattended.");
+    // Never unattended, and no CLI or API boolean can override this. It runs
+    // only when a human boundary is genuinely present: an operator handoff is
+    // attached AND the artifact records where the machine must stop.
+    const humanBounded = artifact.steps.some((step) => step.execution === "human_required");
+    if (!options.handoff || !humanBounded) {
+      return fail(
+        "policy_blocked",
+        "A human-controlled boundary: an attached operator handoff and a recorded human_required step.",
+        humanBounded
+          ? "No operator handoff is attached; irreversible capabilities never run unattended."
+          : "The artifact records no human_required step, so its irreversible action would execute unattended."
+      );
+    }
   }
 
   // Entry navigation must pass both the artifact allowlist and deployment policy.
@@ -220,6 +232,24 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
         if (!resolution.ok) return fail("target_not_found", "One unique, visible, enabled locator strategy to resolve.", "Every locator strategy was exhausted.");
         resolved = resolution;
         recordTier(stats, step.id, resolution);
+      }
+
+      // A human-required step is verified, never performed: resolving the
+      // target above proves the screen is the one the boundary was recorded on,
+      // and then the machine stops. The person acts in the same browser; on
+      // hand-back the artifact's own predicates decide where the run is. This
+      // supports the recorded flows, where the irreversible post is the final
+      // step - a satisfied checkpoint completes the run.
+      if (step.execution === "human_required") {
+        if (!options.handoff) return fail("policy_blocked", "An attached operator handoff for the human-required step.", "This step must be performed by a person and no handoff is attached.");
+        const resume = await requestHandoff(step, observation, "This step is irreversible and must be performed by a person.", step.intent);
+        if (resume === "timed_out") return fail("timeout", "A human operator to take control of the paused run.", "The intervention request expired with no operator.");
+        if (resume === "checkpoint") break stepsLoop;
+        if (resume === "completed") break;
+        if (resume === "retry") {
+          return fail("precondition_failed", "The human-required step performed by the operator.", "Control was handed back but the irreversible step was not performed.");
+        }
+        return fail("precondition_failed", "A resumable state after human handoff.", "State diverged after handoff.");
       }
 
       // Materialize the action, enforce the capability allowlist, infer runtime

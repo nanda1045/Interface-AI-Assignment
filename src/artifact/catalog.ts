@@ -16,6 +16,10 @@ export interface CatalogEntry {
    *  actually invoked rather than the name it asked for. */
   reference: string;
   risk: CapabilityArtifact["capability"]["risk"];
+  /** Irreversible capabilities are requestable but never executed unattended:
+   *  replay walks safely to the recorded boundary, pauses, and a person
+   *  performs the final action. A caller sees that before invoking. */
+  requires_human: boolean;
   tool: CapabilityTool;
 }
 
@@ -53,16 +57,23 @@ export function toCapabilityTool(artifact: CapabilityArtifact): CapabilityTool {
   };
 }
 
-/** Irreversible capabilities are omitted entirely. Replay refuses them
- *  unattended, so listing one would advertise a call that is guaranteed to
- *  fail - and an agent should not be told it can do something it cannot. */
+/** Every approved capability is listed, including irreversible ones - those
+ *  carry requires_human and their tool description says the run pauses for a
+ *  person, so an agent can request the work while never being told it could
+ *  complete the final step itself. */
 export function buildCatalog(artifacts: CapabilityArtifact[]): CatalogEntry[] {
   return artifacts
-    .filter((artifact) => artifact.capability.risk !== "irreversible")
-    .map((artifact) => ({
-      reference: `${artifact.capability.id}@${artifact.capability.version}`,
-      risk: artifact.capability.risk,
-      tool: toCapabilityTool(artifact)
-    }))
+    .map((artifact) => {
+      const requiresHuman = artifact.capability.risk === "irreversible";
+      const tool = toCapabilityTool(artifact);
+      return {
+        reference: `${artifact.capability.id}@${artifact.capability.version}`,
+        risk: artifact.capability.risk,
+        requires_human: requiresHuman,
+        tool: requiresHuman
+          ? { ...tool, description: `${tool.description} Execution pauses before the final irreversible step for a human operator to complete it.` }
+          : tool
+      };
+    })
     .sort((left, right) => left.tool.name.localeCompare(right.tool.name));
 }

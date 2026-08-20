@@ -61,6 +61,18 @@ describe("answering a question by invoking a capability", () => {
     expect(result.answer).toMatch(/changes records/);
   });
 
+  it("explains the human boundary instead of running an irreversible capability", async () => {
+    // No flag on this path changes it: the command runs with no operator
+    // attached, so the answer says where the human boundary lives.
+    const execute = vi.fn(async () => succeeded);
+    const result = await ask({
+      ...base, catalog: catalogOf("irreversible"), execute, allowMutations: true,
+      fetchImpl: modelReturning(picks({ member_id: "8832" }))
+    });
+    expect(execute).not.toHaveBeenCalled();
+    expect(result.answer).toMatch(/human boundary|--handoff/);
+  });
+
   it("runs a mutating capability once that is explicitly permitted", async () => {
     const execute = vi.fn(async () => succeeded);
     await ask({

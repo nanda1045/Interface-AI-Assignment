@@ -65,6 +65,10 @@ const stepSchema = strict({
   action: actionSchema,
   target: targetSchema.optional(),
   wait: strict({ readyWhen: z.enum(["target_resolvable", "page_loaded"]), timeout_ms: z.number().int().positive() }),
+  // "human_required" marks a step the machine verified but must never perform:
+  // replay resolves the target to prove the screen is right, then pauses and a
+  // person completes the action in the same browser. Absent means "agent".
+  execution: z.enum(["agent", "human_required"]).optional(),
   postconditions: z.array(predicateSchema)
 }).superRefine((step, context) => {
   // Element actions are invalid without a durable target locator ladder.

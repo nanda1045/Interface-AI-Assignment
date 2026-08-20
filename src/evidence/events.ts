@@ -19,6 +19,7 @@ export type RunEvent =
   | { type: "lease_change"; state: ControlState }
   | { type: "human_action"; action: { kind: string; control?: string; value?: string; url?: string } }
   | { type: "signed_on"; operator: string; app: string }
+  | { type: "human_step_recorded"; step: number; action: AbstractAction }
   | { type: "stopped"; reason: string }
   | { type: "result"; status: "success" | "business_outcome" | "escalated" | "failure"; detail: unknown };
 

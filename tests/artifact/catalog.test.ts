@@ -40,16 +40,19 @@ describe("projecting a capability into a tool definition", () => {
     expect(tool.description).toContain("Returns: balance (usd-currency)");
   });
 
-  it("never advertises an irreversible capability", () => {
-    // Replay refuses these unattended, so listing one would offer an agent a
-    // call that is guaranteed to fail.
+  it("lists an irreversible capability as requestable but human-bounded", () => {
+    // Requestable, never executed unattended: replay walks to the recorded
+    // boundary and a person performs the final step. The flag and the tool
+    // description both say so before any caller invokes it.
     const catalog = buildCatalog([shaped((artifact) => { artifact.capability.risk = "irreversible"; })]);
-    expect(catalog).toHaveLength(0);
+    expect(catalog).toHaveLength(1);
+    expect(catalog[0]).toMatchObject({ requires_human: true, risk: "irreversible" });
+    expect(catalog[0]?.tool.description).toContain("pauses before the final irreversible step");
   });
 
   it("marks risk so a caller can refuse to run a mutating capability unattended", () => {
     const catalog = buildCatalog([shaped((artifact) => { artifact.capability.risk = "mutating"; })]);
-    expect(catalog[0]).toMatchObject({ risk: "mutating", reference: "lookup_balance@1.0.0" });
+    expect(catalog[0]).toMatchObject({ risk: "mutating", requires_human: false, reference: "lookup_balance@1.0.0" });
   });
 });
 

@@ -145,6 +145,7 @@ function distillStep(
     action,
     ...(target ? { target } : {}),
     wait: { readyWhen: target ? "target_resolvable" : "page_loaded", timeout_ms: 10_000 },
+    ...(recorded.execution ? { execution: recorded.execution } : {}),
     postconditions
   };
 }
