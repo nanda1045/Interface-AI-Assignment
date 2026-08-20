@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import YAML from "yaml";
 import { appProfileSchema, loadProfile, profileForApp, profileForOrigin, resolveCredentials } from "../../src/profile/profile.js";
 import { corePointSignatures, detectEscalation, detectGlobalFailure } from "../../src/replay/detectors.js";
 import type { Observation } from "../../src/surface/types.js";
+
+const roots: string[] = [];
+afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 function observing(text: string, url = "https://web-sample.interface-hiring.com/members/100234"): Observation {
   return {
@@ -37,6 +44,30 @@ describe("app profiles", () => {
     // which path loaded the target.
     const corepoint = await loadProfile("profiles/corepoint.yaml");
     expect(corepoint.detectors).toEqual(corePointSignatures);
+  });
+
+  it("rejects a profile whose regex fields do not compile, before any browser launches", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-profile-"));
+    roots.push(root);
+    const base = {
+      app: { id: "broken-app", vendor: "V", ui_version_range: "1", origin: "https://broken.test" },
+      policy: "policies/default.yaml",
+      detectors: { session_lost: { paths: [], patterns: [] }, app_error: { patterns: ["ok"] }, escalation: { patterns: [] } },
+      outcome_templates: [],
+      recovery_templates: []
+    };
+    // A stray unclosed character class in each regex-bearing field in turn.
+    const cases: [string, object][] = [
+      ["irreversible_actions", { ...base, irreversible_actions: ["Post Transfer["] }],
+      ["detectors.app_error", { ...base, detectors: { ...base.detectors, app_error: { patterns: ["oops("] } } }],
+      ["signon.authenticated_pattern", { ...base, signon: { url: "https://broken.test/s", fields: { operator: "o", password: "p" }, authenticated_pattern: "OK[", failure_pattern: "no" } }],
+      ["outcome_templates", { ...base, outcome_templates: [{ code: "X", when: [{ kind: "text_visible", pattern: "bad[" }] }] }]
+    ];
+    for (const [label, profile] of cases) {
+      const file = path.join(root, `${label.replace(/\W+/g, "_")}.yaml`);
+      await writeFile(file, YAML.stringify(profile));
+      await expect(loadProfile(file), label).rejects.toThrow(/invalid regular expression/);
+    }
   });
 
   it("resolves named credentials from the environment without echoing values", async () => {

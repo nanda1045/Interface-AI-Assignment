@@ -86,8 +86,43 @@ export interface ResolvedCredentials {
   branch?: string;
 }
 
+// Every pattern in a profile is used with new RegExp() somewhere in discovery
+// or replay. A typo like "Post Transfer[" would otherwise throw deep inside a
+// run, after a browser had launched; compiling them all here fails the load
+// with the exact field and pattern instead.
+function assertPatternsCompile(profile: AppProfile): void {
+  const patterns: [string, string][] = [
+    ...(profile.irreversible_actions ?? []).map((pattern, index): [string, string] => [`irreversible_actions[${index}]`, pattern]),
+    ...profile.detectors.session_lost.patterns.map((pattern, index): [string, string] => [`detectors.session_lost.patterns[${index}]`, pattern]),
+    ...profile.detectors.app_error.patterns.map((pattern, index): [string, string] => [`detectors.app_error.patterns[${index}]`, pattern]),
+    ...profile.detectors.escalation.patterns.map((pattern, index): [string, string] => [`detectors.escalation.patterns[${index}]`, pattern]),
+    ...(profile.signon ? [["signon.authenticated_pattern", profile.signon.authenticated_pattern], ["signon.failure_pattern", profile.signon.failure_pattern]] as [string, string][] : []),
+    ...profile.outcome_templates.flatMap((template, templateIndex) => predicatePatterns(template.when).map(([path, pattern]): [string, string] => [`outcome_templates[${templateIndex}].when.${path}`, pattern])),
+    ...profile.recovery_templates.flatMap((template, templateIndex) => predicatePatterns([template.condition]).map(([path, pattern]): [string, string] => [`recovery_templates[${templateIndex}].condition.${path}`, pattern]))
+  ];
+  for (const [path, pattern] of patterns) {
+    try {
+      // eslint-disable-next-line no-new
+      new RegExp(pattern);
+    } catch (error) {
+      throw new Error(`Profile ${profile.app.id} has an invalid regular expression at ${path}: ${(error as Error).message}`);
+    }
+  }
+}
+
+// Predicate kinds carry their pattern under different keys; pull whichever
+// applies so the same compile check covers outcome and recovery conditions.
+function predicatePatterns(predicates: { kind: string; pattern?: string; textPattern?: string }[]): [string, string][] {
+  return predicates.flatMap((predicate, index) => {
+    const pattern = predicate.pattern ?? predicate.textPattern;
+    return pattern ? [[`[${index}].pattern`, pattern] as [string, string]] : [];
+  });
+}
+
 export async function loadProfile(filePath: string): Promise<AppProfile> {
-  return appProfileSchema.parse(YAML.parse(await readFile(filePath, "utf8")));
+  const profile = appProfileSchema.parse(YAML.parse(await readFile(filePath, "utf8")));
+  assertPatternsCompile(profile);
+  return profile;
 }
 
 /** Find the profile owning an app id. Returns undefined when no profile claims
