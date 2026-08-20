@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runDiscovery } from "../../src/agent/loop.js";
-import type { AgentDecision, LLMClient } from "../../src/agent/llm/client.js";
+import type { AgentDecision, DecideRequest, LLMClient } from "../../src/agent/llm/client.js";
 import type { HandoffCoordinator, InterventionContext, InterventionRequest } from "../../src/control/intervention.js";
 import { RunLogger } from "../../src/evidence/run-logger.js";
 import { PolicyEngine, type PolicyConfig } from "../../src/policy/engine.js";
@@ -65,11 +65,13 @@ class FakeCoordinator implements HandoffCoordinator {
 
 class SequenceClient implements LLMClient {
   public readonly model = "test-model";
+  public requests: DecideRequest[] = [];
   private index = 0;
 
   public constructor(private readonly decisions: AgentDecision[]) {}
 
-  public async decide() {
+  public async decide(request: DecideRequest) {
+    this.requests.push(request);
     const decision = this.decisions[this.index++];
     if (!decision) throw new Error("Test decision sequence exhausted");
     return { decision, raw: { decision } };
@@ -111,6 +113,109 @@ describe("runDiscovery", () => {
     expect(persisted).not.toContain("4521");
     expect(persisted).not.toContain("$2,481.13");
     expect(persisted).toContain("«redacted»");
+  });
+
+  it("names the acted-on element in history, without the typed value", async () => {
+    // "type completed" alone loses the thread on a multi-field form: the model
+    // cannot tell which field it already filled and re-fills one instead of
+    // moving on - the exact loop the MERIDIAN sign-on recording died in.
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const llm = new SequenceClient([
+      { kind: "type", ref: "field", text: "4521", sensitive: true, reasoning: "Enter the requested member ID." },
+      { kind: "click", ref: "search", reasoning: "Run the read-only search." },
+      { kind: "note_output", ref: "balance", name: "savings_balance", reasoning: "Record the visible balance." },
+      { kind: "finish", reasoning: "Done." }
+    ]);
+    await runDiscovery({ goal: "Look up member 4521 balance", target: "http://localhost:4478/desk", surface: new FakeSurface(), policy: new PolicyEngine(config), llm, logger: new RunLogger("disc_history", root) });
+
+    // The loop mutates one shared history array, so inspect the final request.
+    const history = llm.requests[llm.requests.length - 1]?.history ?? [];
+    expect(history[0]?.result).toContain('type on "Member No." completed');
+    expect(history[1]?.result).toContain('click on "Search" completed');
+  });
+
+  it("names the chosen option value for select actions in history", async () => {
+    class SelectSurface extends FakeSurface {
+      private observations = 0;
+      public override async observe(): Promise<Observation> {
+        this.observations += 1;
+        return {
+          url: "http://localhost:4478/desk", title: "CorePoint", frames: [{ path: "main", url: "http://localhost:4478/desk" }],
+          elements: [{ ref: "mode", frame: "main", role: "combobox", name: "Search by", state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.2, 0.1], hints: { nearLabel: "Search by" }, options: [{ value: "number", label: "Member Number" }, { value: "name", label: "Last Name" }] }],
+          stateHash: `select-${this.observations}`
+        };
+      }
+    }
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const llm = new SequenceClient([
+      { kind: "select", ref: "mode", value: "name", reasoning: "Switch to last-name search." },
+      { kind: "finish", reasoning: "Done." }
+    ]);
+    await runDiscovery({ goal: "Switch the search mode", target: "http://localhost:4478/desk", surface: new SelectSurface(), policy: new PolicyEngine(config), llm, logger: new RunLogger("disc_selecthist", root) });
+    const history = llm.requests[llm.requests.length - 1]?.history ?? [];
+    expect(history[0]?.result).toContain('select on "Search by" = "name" completed');
+    expect(JSON.stringify(llm.requests.map((request) => request.history))).not.toContain("4521");
+  });
+
+  it("feeds a failed browser action back to the model instead of crashing", async () => {
+    // A wrong select option value used to throw out of surface.act and kill the
+    // whole discovery process with no result.json at all.
+    class FlakySurface extends FakeSurface {
+      private observations = 0;
+      public override async observe(): Promise<Observation> {
+        this.observations += 1;
+        return {
+          url: "http://localhost:4478/desk", title: "CorePoint", frames: [{ path: "main", url: "http://localhost:4478/desk" }],
+          elements: [{ ref: "field", frame: "main", role: "combobox", name: "Search by", state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.2, 0.1], hints: {} }],
+          stateHash: `flaky-${this.observations}`
+        };
+      }
+
+      public override async act(action: AbstractAction) {
+        if (action.kind === "select") throw new Error("did not find some options");
+        return super.act(action);
+      }
+    }
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const surface = new FlakySurface();
+    const llm = new SequenceClient([
+      { kind: "select", ref: "field", value: "wrong", reasoning: "Guess an option value." },
+      { kind: "type", ref: "field", text: "4521", sensitive: true, reasoning: "Recover with a supported action." },
+      { kind: "finish", reasoning: "Done." }
+    ]);
+    const result = await runDiscovery({ goal: "Pick a search mode", target: "http://localhost:4478/desk", surface, policy: new PolicyEngine(config), llm, logger: new RunLogger("disc_actfail", root) });
+    expect(result.status).toBe("success");
+    const history = llm.requests[llm.requests.length - 1]?.history ?? [];
+    expect(history[0]?.result).toContain("FAILED");
+    expect(result.steps.map((step) => step.action.kind)).toEqual(["type"]);
+  });
+
+  it("ends discovery as a controlled failure after three consecutive action failures", async () => {
+    class AlwaysFailingSurface extends FakeSurface {
+      private observations = 0;
+      public override async observe(): Promise<Observation> {
+        this.observations += 1;
+        return {
+          url: "http://localhost:4478/desk", title: "CorePoint", frames: [{ path: "main", url: "http://localhost:4478/desk" }],
+          elements: [{ ref: "field", frame: "main", role: "combobox", name: "Search by", state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.2, 0.1], hints: {} }],
+          stateHash: `broken-${this.observations}`
+        };
+      }
+
+      public override async act(action: AbstractAction) {
+        if (action.kind === "select") throw new Error("did not find some options");
+        return super.act(action);
+      }
+    }
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const llm = new SequenceClient(Array.from({ length: 3 }, () => ({ kind: "select" as const, ref: "field", value: "wrong", reasoning: "Guess again." })));
+    const result = await runDiscovery({ goal: "Pick a search mode", target: "http://localhost:4478/desk", surface: new AlwaysFailingSurface(), policy: new PolicyEngine(config), llm, logger: new RunLogger("disc_actfail3", root) });
+    expect(result.status).toBe("failure");
+    expect(result.reason).toContain("Three consecutive browser actions failed");
   });
 
   it("ignores a duplicate output mark so the model can continue or finish", async () => {

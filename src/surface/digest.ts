@@ -127,12 +127,18 @@ export async function digestFrame(frame: Frame, observationId: string): Promise<
         (role === "textbox" || role === "combobox" ? nearLabel : text) ||
         clean(element.getAttribute("name"));
       const control = element as HTMLInputElement;
+      // A select's option VALUES are not visible as text ("Last Name" may
+      // submit as "name"); without them the model can only guess.
+      const options = element.tagName.toLowerCase() === "select"
+        ? [...(element as HTMLSelectElement).options].map((option) => ({ value: option.value, label: clean(option.textContent) }))
+        : undefined;
       return [{
         localRef,
         role,
         name: semanticName,
         ...(text ? { text } : {}),
         ...(typeof control.value === "string" && control.value ? { value: control.value } : {}),
+        ...(options ? { options } : {}),
         state: { visible, enabled: !(control.disabled ?? false) },
         // Viewport-relative geometry is more portable than raw pixel coordinates
         // and is used only as the weakest locator fallback.

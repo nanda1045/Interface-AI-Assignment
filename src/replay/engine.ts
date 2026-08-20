@@ -64,7 +64,10 @@ function materializeAction(step: CapabilityArtifact["steps"][number], params: Re
     }
     case "select": {
       if (!ref) throw new Error("select is missing a resolved target.");
-      return { kind: "select", ref, value: String(params[action.value_from.param]) };
+      // Parameterised selects take the invocation's value; constant selects are
+      // the flow's own fixed choice and replay exactly as recorded.
+      const value = action.value_from ? String(params[action.value_from.param]) : action.value ?? "";
+      return { kind: "select", ref, value };
     }
     case "press": return action;
     case "scroll": return action;
@@ -236,6 +239,11 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   const entryViolation = artifactPolicyViolation(artifact, entryAction);
   if (entryViolation) return fail("policy_blocked", "An entry URL inside the artifact's own allowlist.", entryViolation);
 
+  // A capability with no authenticated precondition (the sign-on flow itself)
+  // legitimately operates on the sign-on screen; classifying that screen as
+  // session_lost would fail it at its own front door.
+  const requiresAuthentication = artifact.entry.preconditions.some((precondition) => precondition.kind === "authenticated");
+
   // A recovery rule with effect restart_capability re-enters here: some
   // interstitials (MERIDIAN's maintenance page) exit to a menu, so the only
   // sound resumption is from the capability's own entry. Bounded by the rule's
@@ -260,7 +268,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
 
       // Before acting, detect global application/session failures, apply bounded
       // recovery, offer handoff for approval walls, and classify business outcomes.
-      const preGlobal = detectGlobalFailure(observation, signatures);
+      const rawPreGlobal = detectGlobalFailure(observation, signatures);
+      const preGlobal = rawPreGlobal?.class === "session_lost" && !requiresAuthentication ? undefined : rawPreGlobal;
       if (preGlobal) {
         if (preGlobal.class !== "session_lost" || !options.handoff) return fail(preGlobal.class, "An authenticated, healthy application screen.", preGlobal.observed);
         const resume = await requestHandoff(step, observation, preGlobal.observed, "Re-authenticate in the live browser session.");
@@ -337,7 +346,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
 
       // Re-observe after the action, then detect hard failures, declared outcomes,
       // recovery conditions, escalation walls, and finally step postconditions.
-      const global = detectGlobalFailure(observation, signatures);
+      const rawGlobal = detectGlobalFailure(observation, signatures);
+      const global = rawGlobal?.class === "session_lost" && !requiresAuthentication ? undefined : rawGlobal;
       if (global) {
         if (global.class !== "session_lost" || !options.handoff) return fail(global.class, "A healthy application screen after the action.", global.observed);
         const resume = await requestHandoff(step, observation, global.observed, "Re-authenticate in the live browser session.");

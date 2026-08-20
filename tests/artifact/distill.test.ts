@@ -39,6 +39,18 @@ describe("distillDiscovery", () => {
     expect(JSON.stringify(artifact)).not.toContain("4521");
   });
 
+  it("promotes an input to sensitive when its recorded typing was sensitive", () => {
+    // A password named "code" would slip past every name heuristic; the model
+    // marked the typing sensitive, and the contract must say so too or replay
+    // would log the invocation value in the clear.
+    const artifact = distillDiscovery(result, {
+      ...options,
+      params: { code: "4521" },
+      inputs: { type: "object" as const, required: ["code"], properties: { code: { type: "string" as const, sensitive: false } } }
+    });
+    expect(artifact.inputs.properties.code).toMatchObject({ sensitive: true });
+  });
+
   it("fails loudly when a supplied parameter never binds", () => {
     expect(() => distillDiscovery(result, { ...options, params: { member_id: "9999" } })).toThrow(/Could not uniquely bind/);
     expect(() => distillDiscovery(result, { ...options, params: { ...options.params, unused: "x" } })).toThrow(/never bound: unused/);
@@ -156,6 +168,50 @@ describe("distillDiscovery", () => {
     expect(mutating.recovery.map((rule) => rule.id)).toEqual(["dismiss"]);
     const readOnly = distillDiscovery(result, { ...options, recoveryTemplates: templates });
     expect(readOnly.recovery.map((rule) => rule.id)).toEqual(["dismiss", "reenter"]);
+  });
+
+  it("skips blank action-column headers in the table mapping", () => {
+    // MERIDIAN's results table has a fourth, header-less column of Select
+    // buttons. It cannot be matched by header text at replay, so it is simply
+    // not data and not part of the mapping.
+    const artifact = distillDiscovery(
+      { ...result, outputs: { matches: { locators: locator, table: { headers: ["Member No.", "Name", "Shares", " "] } } } },
+      { ...options, outputs: { type: "object", required: ["matches"], properties: { matches: { type: "string" } } } }
+    );
+    expect(artifact.extract[0]?.columns?.map((column) => column.property)).toEqual(["member_no", "name", "shares"]);
+  });
+
+  it("keeps only the final choice of consecutive selects on the same control", () => {
+    // Selecting WEST-014 then MAIN-001 leaves the control holding MAIN-001;
+    // replaying the intermediate pick would be noise frozen into the artifact.
+    const artifact = distillDiscovery(
+      runSteps(
+        step({ kind: "type", ref: "e1", text: "4521", sensitive: true }),
+        step({ kind: "select", ref: "e2", value: "WEST-014" }, { ...locator, strategies: [{ ...locator.strategies[0]!, value: "select[name='branch']" }] }),
+        step({ kind: "select", ref: "e2", value: "MAIN-001" }, { ...locator, strategies: [{ ...locator.strategies[0]!, value: "select[name='branch']" }] })
+      ),
+      { ...options, params: { member_id: "4521", branch: "MAIN-001" }, inputs: { type: "object", required: ["member_id", "branch"], properties: { member_id: { type: "string", sensitive: true }, branch: { type: "string" } } } }
+    );
+    const selects = artifact.steps.filter((artifactStep) => artifactStep.action.kind === "select");
+    expect(selects).toHaveLength(1);
+    expect(selects[0]?.action).toMatchObject({ value_from: { param: "branch" } });
+    expect(JSON.stringify(artifact)).not.toContain("WEST-014");
+  });
+
+  it("records a select that binds no parameter as the flow's own constant", () => {
+    // "Search by Last Name" is a fixed choice, not invocation data. Typed text
+    // gets no such fallback - unbound free text stays a loud error.
+    const artifact = distillDiscovery(
+      runSteps(
+        step({ kind: "select", ref: "e1", value: "name" }),
+        step({ kind: "type", ref: "e2", text: "4521", sensitive: true })
+      ),
+      options
+    );
+    expect(artifact.steps[0]?.action).toEqual({ kind: "select", value: "name" });
+    expect(artifact.steps[0]?.postconditions).toEqual([]);
+    expect(() => distillDiscovery(runSteps(step({ kind: "type", ref: "e1", text: "unbound-text" }), step({ kind: "type", ref: "e2", text: "4521", sensitive: true })), options))
+      .toThrow(/Could not uniquely bind/);
   });
 
   it("generalises parameter values in a synthesized url postcondition", () => {

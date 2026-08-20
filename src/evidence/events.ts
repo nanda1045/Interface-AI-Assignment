@@ -12,6 +12,9 @@ export type RunEvent =
   | { type: "decision"; step: number; reasoning: string; decision: string }
   | { type: "policy_check"; step: number; verdict: PolicyVerdict }
   | { type: "action"; step: number; action: AbstractAction; locators?: LocatorBundle; resultUrl: string }
+  // A browser action the Surface could not perform (wrong option value, detached
+  // element). Discovery survives it and feeds the failure back to the model.
+  | { type: "action_failed"; step: number; action: AbstractAction; detail: string }
   | { type: "output_marked"; step: number; name: string; locators: LocatorBundle }
   | { type: "detector_hit"; step: number; detector: string; classification: string }
   | { type: "recovery_applied"; step: number; rule: string }

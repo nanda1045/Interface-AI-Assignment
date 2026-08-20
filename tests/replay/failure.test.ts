@@ -51,6 +51,27 @@ class SupervisorWallSurface implements Surface {
   public async close() {}
 }
 
+// Sits on the sign-on screen itself - the legitimate workplace of an
+// unauthenticated sign-on capability and a session_lost path for everyone else.
+class SignOnScreenSurface implements Surface {
+  public async observe(options?: { screenshot?: boolean }): Promise<Observation> {
+    return {
+      url: "http://localhost:4478/login", title: "Sign On", frames: [{ path: "main", url: "http://localhost:4478/login" }],
+      elements: [{ ref: "submit", frame: "main", role: "button", name: "Submit", text: "Submit", state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.1, 0.1], hints: {} }],
+      ...(options?.screenshot ? { screenshot: "data:image/png;base64,iVBORw0KGgo=" } : {}),
+      stateHash: "signon"
+    };
+  }
+
+  public async act() { return { ok: true as const, url: "http://localhost:4478/login" }; }
+  public async captureLocators(): Promise<LocatorBundle> { throw new Error("not used"); }
+  public async resolve(_target: TargetSpec) { return { ok: true as const, ref: "submit", frame: "main", matchedStrategy: target.strategies[0]!, tier: 1, attempts: [{ strategy: target.strategies[0]!, matched: 1 }] }; }
+  public async read() { return { text: "done" }; }
+  public async readTable() { return { headers: [], rows: [] }; }
+  public async snapshotDom() { return "<html></html>"; }
+  public async close() {}
+}
+
 const target = { frame: "main", strategies: [{ kind: "role_name" as const, role: "button", name: "Submit", frame: "main", unique: true as const, confidence: 0.9 }] };
 const artifact: CapabilityArtifact = {
   schema_version: "1.0",
@@ -66,6 +87,31 @@ const artifact: CapabilityArtifact = {
 const config: PolicyConfig = { allowed_origins: ["http://localhost:4478"], allowed_path_patterns: ["^/workspace(/.*)?$"], allowed_actions: ["navigate", "click"], max_steps: 5, max_duration_ms: 1_000, risk: { discovery_mutations: "block", irreversible: "escalate" } };
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
+
+describe("session_lost and the unauthenticated capability", () => {
+  const signOnArtifact = (preconditions: CapabilityArtifact["entry"]["preconditions"]): CapabilityArtifact => ({
+    ...structuredClone(artifact),
+    capability: { ...structuredClone(artifact.capability), risk: "read_only" },
+    entry: { url: "http://localhost:4478/login", preconditions },
+    checkpoint: { assert: [{ kind: "text_visible", pattern: "Submit" }] },
+    policy: { ...artifact.policy }
+  });
+  const loginConfig: PolicyConfig = { ...config, allowed_path_patterns: ["^/(login|workspace)(/.*)?$"] };
+
+  it("does not fail a capability with no authenticated precondition at its own front door", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-replay-"));
+    roots.push(root);
+    const result = await replay({ artifact: signOnArtifact([]), params: { member_id: "4521" }, surface: new SignOnScreenSurface(), policy: new PolicyEngine(loginConfig), logger: new RunLogger("replay_signon", root) });
+    expect(result).toMatchObject({ status: "success", outputs: { result: "done" } });
+  });
+
+  it("still classifies the sign-on screen as session_lost when the capability requires authentication", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-replay-"));
+    roots.push(root);
+    const result = await replay({ artifact: signOnArtifact([{ kind: "authenticated", via: "test session" }]), params: { member_id: "4521" }, surface: new SignOnScreenSurface(), policy: new PolicyEngine(loginConfig), logger: new RunLogger("replay_signon_auth", root) });
+    expect(result).toMatchObject({ status: "failure", failure: { class: "session_lost" } });
+  });
+});
 
 describe("replay hard failures", () => {
   it("reports a timeout with a debug bundle when no operator answers the handoff", async () => {

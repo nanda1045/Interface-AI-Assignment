@@ -1,0 +1,389 @@
+{
+  "schema_version": "1.0",
+  "capability": {
+    "id": "find_member_by_number",
+    "version": "1.0.0",
+    "title": "Find member by member number",
+    "description": "Searches MERIDIAN CORE member inquiry by member number and returns the matching members.",
+    "app": {
+      "id": "meridian-core",
+      "vendor": "Cornerstone Financial Systems",
+      "ui_version_range": ">=4.2 <5"
+    },
+    "risk": "read_only",
+    "status": "approved",
+    "provenance": {
+      "discovered_by": "claude-sonnet-4-6",
+      "discovery_run": "disc_20260820T185717Z",
+      "recorded_at": "2026-08-20T18:57:31.572Z",
+      "approved_by": "reviewer@interface.test",
+      "approved_at": "2026-08-20T18:57:48.712Z",
+      "input_fingerprint": {
+        "member_number": "389ea52cbf951ddf"
+      },
+      "validation": {
+        "run": "approval_20260820T185745Z",
+        "validated_at": "2026-08-20T18:57:48.712Z",
+        "outcome": "success",
+        "reused_params": [],
+        "matched_tiers": {
+          "1": 4
+        }
+      }
+    }
+  },
+  "inputs": {
+    "type": "object",
+    "required": [
+      "member_number"
+    ],
+    "properties": {
+      "member_number": {
+        "type": "string",
+        "sensitive": true
+      }
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "required": [
+      "matches"
+    ],
+    "properties": {
+      "matches": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "member_no": {
+              "type": "string",
+              "sensitive": true
+            },
+            "name": {
+              "type": "string",
+              "sensitive": true
+            },
+            "shares": {
+              "type": "string",
+              "sensitive": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "entry": {
+    "url": "https://web-sample.interface-hiring.com/members",
+    "preconditions": [
+      {
+        "kind": "authenticated",
+        "via": "profile sign-on (teller)"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "id": "s1",
+      "intent": "Step 2: The history shows we already selected 'name', so now we need to select 'number' (Member Number) as instructed.",
+      "action": {
+        "kind": "select",
+        "value": "number"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "label_proximity",
+            "label": "Search by:",
+            "control": "select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.85
+          },
+          {
+            "kind": "attr_css",
+            "value": "select[name=\"by\"]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[1]/td[2]/select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.2822509765625,
+              0.15694444444444444,
+              0.09296875,
+              0.02638888888888889
+            ],
+            "nearText": "Search by:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": []
+    },
+    {
+      "id": "s2",
+      "intent": "Type the member number {{member_number}} into the search value field.",
+      "action": {
+        "kind": "type",
+        "value_from": {
+          "param": "member_number"
+        }
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "attr_css",
+            "value": "input[name=\"q\"]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[1]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.2822509765625,
+              0.19305555555555556,
+              0.1609375,
+              0.02361111111111111
+            ],
+            "nearText": "Value:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "value_equals_param",
+          "param": "member_number"
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "intent": "Step 4: Click the Search button to execute the search for member number {{member_number}}.",
+      "action": {
+        "kind": "click"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[2]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.45225830078125,
+              0.19166666666666668,
+              0.04537353515625,
+              0.02638888888888889
+            ],
+            "nearText": "Value:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "url_matches",
+          "pattern": "^https://web-sample\\.interface-hiring\\.com/members\\?by=number&q=[^/?&#]+"
+        }
+      ]
+    }
+  ],
+  "checkpoint": {
+    "assert": [
+      {
+        "kind": "element_present",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "structural",
+              "value": "/html/body/table/tbody/tr[3]/td/table",
+              "frame": "main",
+              "unique": true,
+              "confidence": 0.5
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "extract": [
+    {
+      "output": "matches",
+      "from": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/table",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          }
+        ]
+      },
+      "parse": "table",
+      "columns": [
+        {
+          "header": "Member No.",
+          "property": "member_no"
+        },
+        {
+          "header": "Name",
+          "property": "name"
+        },
+        {
+          "header": "Shares",
+          "property": "shares"
+        }
+      ]
+    }
+  ],
+  "outcomes": [
+    {
+      "code": "INSUFFICIENT_FUNDS",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "Insufficient available balance"
+        }
+      ],
+      "returns": {
+        "posted": false
+      }
+    },
+    {
+      "code": "MEMBER_NOT_FOUND",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "RECORD NOT FOUND|could not be located on this host"
+        }
+      ],
+      "returns": {
+        "found": false
+      }
+    },
+    {
+      "code": "VALIDATION_REJECTED",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "could not be validated|Please correct the following|TRANSACTION REJECTED"
+        }
+      ],
+      "returns": {
+        "posted": false
+      }
+    },
+    {
+      "code": "SIGNON_REJECTED",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "Invalid operator ID or password"
+        }
+      ]
+    }
+  ],
+  "recovery": [
+    {
+      "id": "maintenance_continue",
+      "condition": {
+        "kind": "text_visible",
+        "pattern": "SCHEDULED MAINTENANCE IN PROGRESS"
+      },
+      "action": {
+        "kind": "click",
+        "target": {
+          "strategies": [
+            {
+              "kind": "text",
+              "value": "Continue",
+              "control": "a",
+              "frame": "main",
+              "unique": true,
+              "confidence": 0.8
+            }
+          ]
+        }
+      },
+      "max_attempts": 2,
+      "effect": "restart_capability"
+    }
+  ],
+  "policy": {
+    "allowed_origins": [
+      "https://web-sample.interface-hiring.com"
+    ],
+    "allowed_actions": [
+      "navigate",
+      "select",
+      "type",
+      "click"
+    ],
+    "max_duration_ms": 120000
+  }
+}

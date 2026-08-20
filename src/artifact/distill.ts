@@ -85,26 +85,37 @@ function targetIdentity(bundle?: LocatorBundle): string | undefined {
   return semantic.length > 0 ? JSON.stringify(semantic) : undefined;
 }
 
-// Collapse only consecutive identical type/select operations on the same target.
-// Repeated clicks are preserved because they may represent meaningful actions.
+// Collapse consecutive redundant operations on the same target. Repeated
+// clicks are preserved because they may represent meaningful actions.
 function repeatsNextValue(step: RecordedStep, next: RecordedStep): boolean {
   const identity = targetIdentity(step.locators);
   if (!identity || identity !== targetIdentity(next.locators)) return false;
   if (step.action.kind === "type" && next.action.kind === "type") return step.action.text === next.action.text;
-  if (step.action.kind === "select" && next.action.kind === "select") return step.action.value === next.action.value;
+  // A select holds exactly one value, so of consecutive selects on the same
+  // control only the final choice ever takes effect - whatever was picked
+  // in between is discovery noise, not a step to replay.
+  if (step.action.kind === "select" && next.action.kind === "select") return true;
   return false;
 }
 
 // Replace recorded type/select literals with references to declared parameters.
 // Ambiguous, constant, or unused values fail instead of leaking into the artifact.
-function bindAction(action: AbstractAction, params: Record<string, string>, used: Set<string>): CapabilityArtifact["steps"][number]["action"] {
+function bindAction(action: AbstractAction, params: Record<string, string>, used: Set<string>, sensitiveParams?: Set<string>): CapabilityArtifact["steps"][number]["action"] {
   if (action.kind === "type" || action.kind === "select") {
     const value = action.kind === "type" ? action.text : action.value;
     const matches = Object.entries(params).filter(([, candidate]) => candidate === value);
+    // A select that matches no parameter is a fixed choice the flow itself
+    // makes - "search by Last Name" - and is recorded as a literal constant.
+    // Typed text gets no such fallback: free text that binds to nothing is
+    // either missing a parameter or data that must not be frozen in.
+    if (matches.length === 0 && action.kind === "select") {
+      return { kind: "select", value: action.value };
+    }
     if (matches.length !== 1) throw new Error(`Could not uniquely bind recorded ${action.kind} value to a supplied parameter.`);
     const param = matches[0]?.[0];
     if (!param) throw new Error(`Could not bind recorded ${action.kind} value.`);
     used.add(param);
+    if (action.kind === "type" && action.sensitive) sensitiveParams?.add(param);
     return action.kind === "type"
       ? { kind: "type", value_from: { param }, ...(action.sensitive ? { sensitive: true } : {}) }
       : { kind: "select", value_from: { param } };
@@ -121,12 +132,17 @@ function bindAction(action: AbstractAction, params: Record<string, string>, used
 // and empty headers get positional names so every column stays addressable.
 function columnsFor(headers: string[]): { header: string; property: string }[] {
   const used = new Set<string>();
-  return headers.map((header, index) => {
-    let property = header.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || `column_${index + 1}`;
-    while (used.has(property)) property = `${property}_${index + 1}`;
-    used.add(property);
-    return { header, property };
-  });
+  return headers
+    // A blank header is an action column ("Select" buttons and the like), not
+    // data: it cannot be matched by header text at replay and the schema
+    // rightly refuses it, so it simply is not part of the mapping.
+    .filter((header) => header.trim() !== "")
+    .map((header, index) => {
+      let property = header.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || `column_${index + 1}`;
+      while (used.has(property)) property = `${property}_${index + 1}`;
+      used.add(property);
+      return { header, property };
+    });
 }
 
 // A synthesized url_matches postcondition must generalise across invocations:
@@ -148,9 +164,10 @@ function distillStep(
   index: number,
   params: Record<string, string>,
   used: Set<string>,
-  tainted: readonly string[]
+  tainted: readonly string[],
+  sensitiveParams?: Set<string>
 ): CapabilityArtifact["steps"][number] {
-  const action = bindAction(recorded.action, params, used);
+  const action = bindAction(recorded.action, params, used, sensitiveParams);
   const target = recorded.locators ? untaintedTarget(recorded.locators, tainted, `step ${index + 1}`) : undefined;
   const targetName = target?.strategies.find((strategy) => strategy.kind === "role_name");
   const rawIntent = recorded.reasoning || `${recorded.action.kind} ${targetName && "name" in targetName ? targetName.name : "the target control"}`;
@@ -163,7 +180,7 @@ function distillStep(
   // inputs and redact every remaining run-sensitive value before persistence.
   const intent = redactString(parameterized, tainted);
   const postconditions: CapabilityArtifact["steps"][number]["postconditions"] = [];
-  if (action.kind === "type" || action.kind === "select") postconditions.push({ kind: "value_equals_param", param: action.value_from.param });
+  if ((action.kind === "type" || action.kind === "select") && "value_from" in action && action.value_from) postconditions.push({ kind: "value_equals_param", param: action.value_from.param });
   if (recorded.afterUrl !== recorded.beforeUrl) postconditions.push({ kind: "url_matches", pattern: urlPattern(recorded.afterUrl, tainted) });
   return {
     id: `s${index + 1}`,
@@ -193,7 +210,8 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
     const next = result.steps[index + 1];
     return !(next && repeatsNextValue(step, next));
   });
-  const steps = recorded.map((step, index) => distillStep(step, index, options.params, used, tainted));
+  const sensitiveParams = new Set<string>();
+  const steps = recorded.map((step, index) => distillStep(step, index, options.params, used, tainted, sensitiveParams));
   if (steps.some((step) => step.execution === "human_required") && options.risk !== "irreversible") {
     throw new Error("Discovery recorded a human_required boundary, so this capability is irreversible. Re-run with --risk irreversible.");
   }
@@ -281,9 +299,20 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
         validation: null
       }
     },
-    inputs: options.inputs,
+    // An input typed with sensitive: true during discovery is sensitive in the
+    // contract no matter what its name looks like - a password named "code"
+    // must still be redacted from every replay's logs and evidence.
+    inputs: {
+      ...options.inputs,
+      properties: Object.fromEntries(Object.entries(options.inputs.properties).map(([name, declared]) => [
+        name,
+        sensitiveParams.has(name) && declared.type !== "array" ? { ...declared, sensitive: true } : declared
+      ]))
+    },
     outputs: outputContract,
-    entry: { url: options.entryUrl, preconditions: [{ kind: "authenticated", via: options.authenticatedVia ?? "mock-auth or an existing teller session" }] },
+    // A flow recorded without any sign-on (the sign-on capability itself)
+    // declares no authenticated precondition - it has no session to lose.
+    entry: { url: options.entryUrl, preconditions: options.authenticatedVia ? [{ kind: "authenticated", via: options.authenticatedVia }] : [] },
     steps,
     checkpoint: { assert: extract.map((item) => ({ kind: "element_present" as const, target: item.from })) },
     extract,

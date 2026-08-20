@@ -80,6 +80,7 @@ export async function runDiscovery(options: {
   const history: { decision: string; result: string }[] = [];
   const hashVisits = new Map<string, number>();
   let duplicateOutputMarks = 0;
+  let consecutiveActionFailures = 0;
   const startedAt = Date.now();
 
   // Start evidence collection and mark identifier-like values from the goal so
@@ -206,10 +207,31 @@ export async function runDiscovery(options: {
     // Capture locators before acting because a click or navigation can remove
     // the selected element. Surface.act(), not the model, operates Playwright.
     const locators = "ref" in action ? await surface.captureLocators(action.ref) : undefined;
-    const result = await surface.act(action);
+    let result;
+    try {
+      result = await surface.act(action);
+    } catch (error) {
+      // A failed browser action (wrong option value, detached element) is
+      // feedback for the model, not a process crash. Bounded like every other
+      // wrong turn: three strikes ends the run as a controlled failure.
+      consecutiveActionFailures += 1;
+      const detail = error instanceof Error ? error.message.split("\n")[0]?.slice(0, 200) ?? "unknown" : "unknown";
+      await logger.event({ type: "action_failed", step, action, detail });
+      if (consecutiveActionFailures >= 3) return finish("failure", `Three consecutive browser actions failed; last: ${detail}`);
+      history.push({ decision: decision.kind, result: `The ${action.kind} action FAILED: ${detail}. Choose a different approach.` });
+      continue;
+    }
+    consecutiveActionFailures = 0;
     steps.push({ step, reasoning: decision.reasoning, action, ...(locators ? { locators } : {}), beforeUrl: observation.url, afterUrl: result.url });
     await logger.event({ type: "action", step, action, ...(locators ? { locators } : {}), resultUrl: result.url });
-    history.push({ decision: decision.kind, result: `Action completed; URL is ${result.url}.` });
+    // Name the element acted on: on a multi-field form, "type completed" alone
+    // loses the thread and the model re-fills fields it already filled. Labels
+    // only - never the typed value, which may be sensitive.
+    const actedOn = targetElement ? ` on "${(targetElement.hints?.nearLabel ?? targetElement.name ?? targetElement.text ?? "").slice(0, 60).trim()}"` : "";
+    // A select's chosen option value is an identifier, not data - naming it lets
+    // the model see that a two-step dropdown dance has moved past step one.
+    const chosen = action.kind === "select" ? ` = "${action.value}"` : "";
+    history.push({ decision: decision.kind, result: `${decision.kind}${actedOn}${chosen} completed; URL is ${result.url}.` });
   }
   return finish("failure", `Discovery exceeded max_steps (${policy.config.max_steps}).`);
 

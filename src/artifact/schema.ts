@@ -59,7 +59,10 @@ const actionSchema = z.discriminatedUnion("kind", [
   strict({ kind: z.literal("navigate"), url: z.string().url() }),
   strict({ kind: z.enum(["click", "focus"]) }),
   strict({ kind: z.literal("type"), value_from: strict({ param: z.string() }), sensitive: z.boolean().optional() }),
-  strict({ kind: z.literal("select"), value_from: strict({ param: z.string() }) }),
+  // A select is either parameterised or a fixed choice the flow itself makes
+  // ("search by Last Name") - exactly one of the two.
+  strict({ kind: z.literal("select"), value_from: strict({ param: z.string() }).optional(), value: z.string().optional() })
+    .refine((action) => (action.value_from === undefined) !== (action.value === undefined), { message: "A select needs exactly one of value_from or a literal value." }),
   strict({ kind: z.literal("press"), key: z.string() }),
   strict({ kind: z.literal("scroll"), direction: z.enum(["up", "down"]) })
 ]);
@@ -163,7 +166,7 @@ export const capabilityArtifactSchema = strict({
   const inputNames = new Set(Object.keys(artifact.inputs.properties));
   const outputNames = new Set(Object.keys(artifact.outputs.properties));
   artifact.steps.forEach((step, index) => {
-    if ((step.action.kind === "type" || step.action.kind === "select") && !inputNames.has(step.action.value_from.param)) {
+    if ((step.action.kind === "type" || step.action.kind === "select") && step.action.value_from && !inputNames.has(step.action.value_from.param)) {
       context.addIssue({ code: "custom", path: ["steps", index, "action", "value_from", "param"], message: "Parameter is not declared in inputs." });
     }
   });

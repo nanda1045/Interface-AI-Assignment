@@ -144,9 +144,11 @@ program.command("discover")
             app: { id: profile.app.id, vendor: profile.app.vendor, ui_version_range: profile.app.ui_version_range },
             outcomeTemplates: profile.outcome_templates,
             recoveryTemplates: profile.recovery_templates,
-            authenticatedVia: raw.auth ? `profile sign-on (${raw.auth})` : "an existing operator session"
+            // A capability recorded without credentials (the sign-on flow
+            // itself) has no authenticated precondition to declare.
+            ...(raw.auth || raw.mockAuth ? { authenticatedVia: raw.auth ? `profile sign-on (${raw.auth})` : "mock-auth training session" } : {})
           } : {}),
-          inputs: { type: "object", required: Object.keys(params), properties: Object.fromEntries(Object.keys(params).map((name) => [name, { type: "string", sensitive: /member|account|ssn/i.test(name) }])) },
+          inputs: { type: "object", required: Object.keys(params), properties: Object.fromEntries(Object.keys(params).map((name) => [name, { type: "string", sensitive: /member|account|ssn|password|pin|secret/i.test(name) }])) },
           outputs: { type: "object", required: Object.keys(result.outputs), properties: Object.fromEntries(Object.keys(result.outputs).map((name) => [name, { type: "string", ...(/member|name|balance|account|ssn/i.test(name) ? { sensitive: true } : {}), ...(name.includes("balance") ? { "x-format": "usd-currency" } : {}) }])) }
         });
 

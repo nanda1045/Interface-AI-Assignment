@@ -25,6 +25,9 @@ export interface DigestElement {
   name: string;
   text?: string;
   value?: string;
+  // Present only on selects: the submittable option values are not visible as
+  // page text, and without them a model can only guess them from labels.
+  options?: { value: string; label: string }[];
   state: { visible: boolean; enabled: boolean };
   bboxPct: [number, number, number, number];
   hints: { nearLabel?: string; sectionHeading?: string };
