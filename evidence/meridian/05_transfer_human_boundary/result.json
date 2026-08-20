@@ -1,0 +1,26 @@
+{
+  "status": "success",
+  "outputs": {
+    "member_transfer_confirmation": "«redacted»"
+  },
+  "evidence": "/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/runs/approval_20260820T203802Z",
+  "stability": {
+    "resolutions": 9,
+    "matched_tiers": {
+      "1": 9
+    },
+    "matched_strategies": {
+      "attr_css": 1,
+      "role_name": 4,
+      "label_proximity": 3,
+      "structural": 1
+    },
+    "rescued_steps": []
+  },
+  "intervention": {
+    "count": 1,
+    "requestIds": [
+      "approval_20260820T203802Z_int_1"
+    ]
+  }
+}

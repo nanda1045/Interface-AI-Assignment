@@ -1,0 +1,14 @@
+{"type":"signed_on","operator":"teller1","app":"meridian-core","at":"2026-08-20T22:49:21.893Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"run_started","goal":"Find member by member number","target":"https://web-sample.interface-hiring.com/members","model":"deterministic-replay","capability":"find_member_by_number@1.0.0","at":"2026-08-20T22:49:21.895Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"policy_check","step":0,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-20T22:49:21.895Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"action","step":0,"action":{"kind":"navigate","url":"https://web-sample.interface-hiring.com/members"},"resultUrl":"https://web-sample.interface-hiring.com/members","at":"2026-08-20T22:49:21.930Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"policy_check","step":1,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-20T22:49:21.956Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"action","step":1,"action":{"kind":"select","ref":"r5","value":"number"},"resultUrl":"https://web-sample.interface-hiring.com/members","at":"2026-08-20T22:49:21.958Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"step_completed","step":1,"stepId":"s1","durationMs":2047,"at":"2026-08-20T22:49:23.977Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"policy_check","step":2,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-20T22:49:23.990Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"action","step":2,"action":{"kind":"type","ref":"r6","text":"«redacted»","sensitive":true},"resultUrl":"https://web-sample.interface-hiring.com/members","at":"2026-08-20T22:49:23.994Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"step_completed","step":2,"stepId":"s2","durationMs":28,"at":"2026-08-20T22:49:24.006Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"policy_check","step":3,"verdict":{"allowed":true,"rule":"allowed"},"at":"2026-08-20T22:49:24.016Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"action","step":3,"action":{"kind":"click","ref":"r8"},"resultUrl":"https://web-sample.interface-hiring.com/members?by=number&q=«redacted»","at":"2026-08-20T22:49:24.141Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"step_completed","step":3,"stepId":"s3","durationMs":155,"at":"2026-08-20T22:49:24.161Z","runId":"replay_20260820T224920987Z_001"}
+{"type":"result","status":"success","detail":{"status":"success","outputs":{"matches":[{"member_no":"«redacted»","name":"«redacted»","shares":"«redacted»"}]},"evidence":"/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/runs/replay_20260820T224920987Z_001","stability":{"resolutions":4,"matched_tiers":{"1":4},"matched_strategies":{"label_proximity":1,"attr_css":1,"role_name":1,"structural":1},"rescued_steps":[]}},"at":"2026-08-20T22:49:24.185Z","runId":"replay_20260820T224920987Z_001"}

@@ -1,0 +1,27 @@
+{
+  "status": "success",
+  "outputs": {
+    "matches": [
+      {
+        "member_no": "«redacted»",
+        "name": "«redacted»",
+        "shares": "«redacted»"
+      }
+    ]
+  },
+  "evidence": "/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/runs/replay_20260820T224945097Z_003",
+  "stability": {
+    "resolutions": 5,
+    "matched_tiers": {
+      "1": 5
+    },
+    "matched_strategies": {
+      "text": 1,
+      "label_proximity": 1,
+      "attr_css": 1,
+      "role_name": 1,
+      "structural": 1
+    },
+    "rescued_steps": []
+  }
+}

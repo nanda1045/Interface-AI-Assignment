@@ -1,0 +1,13 @@
+{
+  "status": "failure",
+  "failure": {
+    "class": "app_error",
+    "disposition": "retry",
+    "step": "s1",
+    "intent": "«redacted» \"number\" in \"Search by:\"",
+    "expected": "An authenticated, healthy application screen.",
+    "observed": "The application displayed an unexpected error page.",
+    "domSnapshot": "failure/dom.html"
+  },
+  "evidence": "/Users/nandakishorevuppili/Desktop/InterfaceAI_Assignment/Interface-AI-Assignment/runs/replay_20260820T225000169Z_004"
+}
