@@ -232,6 +232,9 @@ describe("adaptation API", () => {
     const html = await response.text();
     expect(html).toContain("MERIDIAN Automation Dashboard");
     expect(html).toContain("/api/runs");
+    // The chat panel posts to /api/chat and carries the confirm-to-run control.
+    expect(html).toContain("/api/chat");
+    expect(html).toContain("chatinput");
   });
 
   it("lists a run's evidence files including one subdirectory level", async () => {

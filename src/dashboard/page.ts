@@ -35,6 +35,14 @@ a{color:#0645ad}.muted{color:var(--muted)}
     <h2>Capabilities</h2><div id="catalog"></div>
   </section>
   <section class="col">
+    <h2>Chatbot</h2>
+    <div class="card">
+      <div id="chatlog" style="max-height:280px;overflow:auto"><div class="muted">Ask about members, balances, shares. Data-changing requests ask to confirm; transfers and holds pause for a human.</div></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input id="chatinput" style="flex:1" placeholder="e.g. find members named Turing" onkeydown="if(event.key==='Enter')sendChat()">
+        <button onclick="sendChat()">Send</button>
+      </div>
+    </div>
     <h2>Runs</h2><div id="runs"></div>
     <h2>Run detail</h2><div id="detail"><div class="card muted">Select a run.</div></div>
   </section>
@@ -121,5 +129,35 @@ function summ(e){
   if(e.type==='intervention_requested')return 'paused for human';
   return '';
 }
+// Chat panel: posts to /api/chat, shows the reply and its action, and offers a
+// Confirm button for a data-changing request. The reply text comes straight
+// from the API's deterministic formatter - the page never phrases anything.
+let chatlog=[], pendingMessage=null, chatBusy=false;
+const actionTag=a=>({answered:'#0a7d33',clarification:'#4a6fa5',unsupported:'#5b6b7b',confirmation_required:'#a35b00',human_required:'#a01515',error:'#a01515'}[a]||'#5b6b7b');
+function renderChat(){
+  $('chatlog').innerHTML=chatlog.map((m,i)=>{
+    if(m.role==='user')return \`<div style="margin:6px 0"><b>You:</b> \${esc(m.text)}</div>\`;
+    const tag=m.action?\`<span class="tag" style="color:\${actionTag(m.action)}">\${esc(m.action)}</span> \`:'';
+    const isLast=i===chatlog.length-1;
+    const confirm=(m.action==='confirmation_required'&&isLast&&pendingMessage)?\` <button onclick="confirmChat()">Confirm &amp; run</button>\`:'';
+    return \`<div style="margin:6px 0"><b>Bot:</b> \${tag}\${esc(m.text)}\${confirm}</div>\`;
+  }).join('');
+  $('chatlog').scrollTop=$('chatlog').scrollHeight;
+}
+async function sendChat(message,confirm){
+  if(chatBusy)return;
+  const text=message!==undefined?message:$('chatinput').value.trim();if(!text)return;
+  if(message===undefined){chatlog.push({role:'user',text});$('chatinput').value='';}
+  chatBusy=true;chatlog.push({role:'bot',text:'… working',action:''});renderChat();
+  try{
+    const r=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:text,...(confirm?{confirm:true}:{})})});
+    const b=await r.json();chatlog.pop();
+    chatlog.push({role:'bot',text:b.reply||b.error||'(no reply)',action:b.action||(b.error?'error':'')});
+    pendingMessage=(b.action==='confirmation_required')?text:null;
+  }catch(e){chatlog.pop();chatlog.push({role:'bot',text:'Error: '+e.message,action:'error'});}
+  chatBusy=false;renderChat();poll();
+}
+function confirmChat(){if(pendingMessage){const m=pendingMessage;pendingMessage=null;sendChat(m,true);}}
+
 poll();setInterval(poll,1500);
 </script></body></html>`;
