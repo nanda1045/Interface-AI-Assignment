@@ -169,15 +169,34 @@ function distillStep(
 ): CapabilityArtifact["steps"][number] {
   const action = bindAction(recorded.action, params, used, sensitiveParams);
   const target = recorded.locators ? untaintedTarget(recorded.locators, tainted, `step ${index + 1}`) : undefined;
-  const targetName = target?.strategies.find((strategy) => strategy.kind === "role_name");
-  const rawIntent = recorded.reasoning || `${recorded.action.kind} ${targetName && "name" in targetName ? targetName.name : "the target control"}`;
+
+  // Intent is SYNTHESIZED from the bound action and the target's label, never
+  // taken from model reasoning: reasoning quotes whatever the model saw on
+  // screen, and scrubbing can only remove values something already registered
+  // as sensitive - a customer name read off a results row is invisible to it.
+  // Reasoning stays in the run's own evidence, where redaction governs it.
+  const labelled = target?.strategies.find((strategy) => strategy.kind === "role_name" || strategy.kind === "label_proximity");
+  const label = labelled
+    ? `"${"name" in labelled && labelled.name ? labelled.name : "label" in labelled && labelled.label ? labelled.label : "the target control"}"`
+    : "the target control";
+  const rawIntent = (() => {
+    switch (action.kind) {
+      case "type": return `Type {{${action.value_from.param}}} into ${label}`;
+      case "select": return "value_from" in action && action.value_from ? `Select {{${action.value_from.param}}} in ${label}` : `Select "${"value" in action ? action.value : ""}" in ${label}`;
+      case "click": return `Click ${label}`;
+      case "focus": return `Focus ${label}`;
+      case "navigate": return "Navigate to the recorded page";
+      case "press": return `Press ${action.key}`;
+      case "scroll": return `Scroll ${action.direction}`;
+    }
+  })();
+
+  // Labels come from the same strategies that pass locator taint-dropping, but
+  // parameterize and redact anyway - a field label can still embed a value.
   const parameterized = Object.entries(params).reduce(
     (current, [name, value]) => value ? current.split(value).join(`{{${name}}}`) : current,
     rawIntent
   );
-
-  // Model reasoning may repeat data read from the page, so parameterize known
-  // inputs and redact every remaining run-sensitive value before persistence.
   const intent = redactString(parameterized, tainted);
   const postconditions: CapabilityArtifact["steps"][number]["postconditions"] = [];
   if ((action.kind === "type" || action.kind === "select") && "value_from" in action && action.value_from) postconditions.push({ kind: "value_equals_param", param: action.value_from.param });

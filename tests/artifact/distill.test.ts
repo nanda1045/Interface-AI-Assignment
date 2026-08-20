@@ -67,13 +67,17 @@ describe("distillDiscovery", () => {
     expect(artifact.policy.allowed_actions).not.toContain("scroll");
   });
 
-  it("scrubs values the run marked sensitive out of the model's intent text", () => {
+  it("never persists model reasoning as intent, so screen-read data cannot leak", () => {
+    // Scrubbing only removes REGISTERED values. A customer name the model
+    // quoted from a results row was never registered anywhere, so the only
+    // safe intent is one synthesized from the bound action and target label.
     const artifact = distillDiscovery(
-      runWith({ reasoning: 'I can see member 4521 "Alex Testman" in the results.' }),
-      { ...options, sensitiveValues: ["Alex Testman"] }
+      runWith({ reasoning: 'Clicking Select for member 4521 (Vaughan, Dorothy) to open the form.' }),
+      options
     );
-    expect(artifact.steps[0]?.intent).toBe('I can see member {{member_id}} "«redacted»" in the results.');
-    expect(JSON.stringify(artifact)).not.toContain("Alex Testman");
+    expect(artifact.steps[0]?.intent).toBe("Type {{member_id}} into the target control");
+    expect(JSON.stringify(artifact)).not.toContain("Vaughan");
+    expect(JSON.stringify(artifact)).not.toContain("Clicking Select");
   });
 
   it("drops locator strategies built from run-specific data but keeps the rest of the ladder", () => {
