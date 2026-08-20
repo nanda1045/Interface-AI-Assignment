@@ -67,6 +67,11 @@ export const appProfileSchema = strict({
     password_env: z.string(),
     branch_env: z.string().optional()
   })).optional(),
+  // Button/link names whose activation is irreversible on this application.
+  // The generic risk heuristic cannot know that "Post Transfer" moves money;
+  // the profile can, and discovery uses this to stop the model and record a
+  // human_required boundary instead of executing the action.
+  irreversible_actions: z.array(z.string()).optional(),
   detectors: detectorSignaturesSchema,
   outcome_templates: z.array(outcomeTemplateSchema),
   recovery_templates: z.array(recoveryTemplateSchema)

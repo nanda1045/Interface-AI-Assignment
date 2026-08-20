@@ -41,6 +41,16 @@ class FakeSurface implements Surface {
   public async close() {}
 }
 
+// Offers a final-action button by the given name so profile-driven
+// irreversible detection can be exercised.
+class FinalActionSurface extends FakeSurface {
+  public constructor(private readonly buttonName: string) { super(); }
+  public override async observe(): Promise<Observation> {
+    const base = await super.observe();
+    return { ...base, elements: [{ ref: "final", frame: "workarea", role: "button", name: this.buttonName, text: this.buttonName, state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.2, 0.1], hints: {} }] };
+  }
+}
+
 class FakeCoordinator implements HandoffCoordinator {
   public requests: InterventionContext[] = [];
 
@@ -133,6 +143,38 @@ describe("runDiscovery", () => {
     });
 
     expect(result).toMatchObject({ status: "success", outputs: { member_name: { locators: bundle } } });
+  });
+
+  it.each(["Post Transfer", "Apply Hold"])("records '%s' as a human boundary the model never executes", async (buttonName) => {
+    // The generic risk heuristic has no idea these names are irreversible on
+    // MERIDIAN; the profile's irreversible_actions patterns are what stop the
+    // model. The step is recorded with its verified target BEFORE control
+    // transfers, and the click never appears among the agent's actions.
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const surface = new FinalActionSurface(buttonName);
+    const coordinator = new FakeCoordinator();
+    const result = await runDiscovery({
+      goal: "Complete the posting",
+      target: "http://localhost:4478/desk",
+      surface,
+      policy: new PolicyEngine(config),
+      llm: new SequenceClient([
+        { kind: "click", ref: "final", reasoning: "Post it." },
+        { kind: "note_output", ref: "final", name: "confirmation", reasoning: "Record the confirmation." },
+        { kind: "finish", reasoning: "Done." }
+      ]),
+      logger: new RunLogger(`disc_${buttonName.replace(/\W+/g, "_")}`, root),
+      irreversibleActions: ["Post Transfer", "Apply Hold"],
+      handoff: coordinator
+    });
+    expect(result.status).toBe("success");
+    const humanStep = result.steps.find((step) => step.execution === "human_required");
+    expect(humanStep).toBeDefined();
+    expect(humanStep?.locators).toBeDefined();
+    // The model clicked nothing: only the entry navigation was executed.
+    expect(surface.actions.map((action) => action.kind)).toEqual(["navigate"]);
+    expect(coordinator.requests).toHaveLength(1);
   });
 
   it("pauses a stuck discovery into human handoff and resumes the loop", async () => {

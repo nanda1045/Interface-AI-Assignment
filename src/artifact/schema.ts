@@ -169,7 +169,72 @@ export const capabilityArtifactSchema = strict({
   });
   artifact.extract.forEach((extract, index) => {
     if (!outputNames.has(extract.output)) context.addIssue({ code: "custom", path: ["extract", index, "output"], message: "Extraction output is not declared in outputs." });
+
+    // Table extraction and the array contract it fills must agree completely:
+    // a mapping that references a property the items do not declare, or a
+    // scalar parse pointed at an array output, would only fail later and
+    // further from the cause.
+    const declared = artifact.outputs.properties[extract.output];
+    if (extract.parse === "table") {
+      if (!extract.columns || extract.columns.length === 0) {
+        context.addIssue({ code: "custom", path: ["extract", index, "columns"], message: "Table extraction requires a column mapping." });
+        return;
+      }
+      if (!declared || declared.type !== "array") {
+        context.addIssue({ code: "custom", path: ["extract", index, "output"], message: "Table extraction must fill an array-typed output." });
+        return;
+      }
+      const properties = new Set<string>();
+      const headers = new Set<string>();
+      extract.columns.forEach((column, columnIndex) => {
+        if (!(column.property in declared.items.properties)) {
+          context.addIssue({ code: "custom", path: ["extract", index, "columns", columnIndex, "property"], message: `Column property ${column.property} is not declared in the output's items.` });
+        }
+        if (properties.has(column.property)) {
+          context.addIssue({ code: "custom", path: ["extract", index, "columns", columnIndex, "property"], message: `Column property ${column.property} is mapped twice.` });
+        }
+        properties.add(column.property);
+        const header = column.header.trim().toLowerCase();
+        if (header === "") {
+          context.addIssue({ code: "custom", path: ["extract", index, "columns", columnIndex, "header"], message: "Column header is blank; replay could not match it." });
+        }
+        if (headers.has(header)) {
+          context.addIssue({ code: "custom", path: ["extract", index, "columns", columnIndex, "header"], message: `Column header "${column.header}" appears twice; matching by header would be ambiguous.` });
+        }
+        headers.add(header);
+      });
+    } else {
+      if (extract.columns) context.addIssue({ code: "custom", path: ["extract", index, "columns"], message: "Only table extraction takes a column mapping." });
+      if (declared && declared.type === "array") context.addIssue({ code: "custom", path: ["extract", index, "parse"], message: "An array-typed output needs table extraction." });
+    }
   });
+
+  // Every required output must be produced by exactly one extraction; a missing
+  // rule can never satisfy the contract and duplicates would race each other.
+  for (const required of artifact.outputs.required) {
+    const producers = artifact.extract.filter((extract) => extract.output === required).length;
+    if (producers !== 1) {
+      context.addIssue({ code: "custom", path: ["extract"], message: `Required output ${required} has ${producers} extraction rules; it needs exactly one.` });
+    }
+  }
+
+  // An irreversible capability must carry its human boundary in a shape replay
+  // can actually honour: the final business action is the human step, it has a
+  // verified target to prove the screen, and nothing agent-executed follows it
+  // (the capability checkpoint is the completion proof for a final step). The
+  // runtime enforces this too - this check keeps a malformed artifact from ever
+  // being stored as reviewable.
+  if (artifact.capability.risk === "irreversible") {
+    const last = artifact.steps[artifact.steps.length - 1];
+    const humanIndex = artifact.steps.findIndex((step) => step.execution === "human_required");
+    if (humanIndex === -1) {
+      context.addIssue({ code: "custom", path: ["steps"], message: "An irreversible capability must record a human_required step." });
+    } else if (last?.execution !== "human_required") {
+      context.addIssue({ code: "custom", path: ["steps"], message: "The final step of an irreversible capability must be the human_required boundary; agent-executed steps after it would perform the irreversible work unattended." });
+    } else if (!last.target) {
+      context.addIssue({ code: "custom", path: ["steps", artifact.steps.length - 1, "target"], message: "The human_required boundary needs a target locator so replay can verify the screen before pausing." });
+    }
+  }
 });
 
 // Infer TypeScript types from the runtime schemas so compile-time and persisted

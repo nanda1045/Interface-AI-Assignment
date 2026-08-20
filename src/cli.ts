@@ -62,6 +62,7 @@ program.command("discover")
   .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
   .option("--auth <credentials>", "named credential set from the app profile; performs a real sign-on")
   .option("--capability-id <id>", "distill a draft artifact with this id")
+  .option("--risk <tier>", "declared risk of the recorded capability: read_only, mutating or irreversible", "read_only")
   .option("--title <title>", "artifact title")
   .option("--description <description>", "artifact description")
   .option("--param <name=value>", "bind a discovery value to an input parameter", (value, previous: string[]) => [...previous, value], [])
@@ -73,9 +74,10 @@ program.command("discover")
   .option("--console-port <port>", "operator console port", "4590")
   .option("--run-root <path>", "run evidence directory", "runs")
   .option("--run-id <id>", "explicit run id (useful for reproducible evidence)")
-  .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; auth?: string; capabilityId?: string; title?: string; description?: string; param: string[]; output: string[]; artifactRoot: string; bump?: string; overwriteArtifact: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
+  .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; auth?: string; capabilityId?: string; risk: string; title?: string; description?: string; param: string[]; output: string[]; artifactRoot: string; bump?: string; overwriteArtifact: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
     // Discovery is the only command that creates an LLM client.
     if (raw.provider !== "openai" && raw.provider !== "anthropic") throw new Error("--provider must be openai or anthropic.");
+    if (!["read_only", "mutating", "irreversible"].includes(raw.risk)) throw new Error("--risk must be read_only, mutating or irreversible.");
     if (raw.handoff && raw.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
     const browser = await chromium.launch({ headless: raw.headless });
     const context = await browser.newContext();
@@ -109,7 +111,7 @@ program.command("discover")
       }
       // The discovery loop returns a recorded trajectory with verified locator
       // ladders; it does not directly write a capability artifact.
-      const result = await runDiscovery({ goal: raw.goal, target: raw.url, surface, policy, llm, logger, allowMutations: raw.allowMutations, expectedOutputs: raw.output, ...(controller ? { handoff: controller } : {}) });
+      const result = await runDiscovery({ goal: raw.goal, target: raw.url, surface, policy, llm, logger, allowMutations: raw.allowMutations, expectedOutputs: raw.output, irreversibleActions: profile?.irreversible_actions ?? [], ...(controller ? { handoff: controller } : {}) });
       if (result.status === "success" && raw.capabilityId) {
         const params = parseAssignments(raw.param);
         const store = new ArtifactStore(raw.artifactRoot);
@@ -135,6 +137,7 @@ program.command("discover")
           model: llm.model,
           runId: result.runId,
           params,
+          risk: raw.risk as "read_only" | "mutating" | "irreversible",
           ...(version ? { version } : {}),
           sensitiveValues: logger.knownSensitiveValues(),
           ...(profile ? {

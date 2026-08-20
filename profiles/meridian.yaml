@@ -30,6 +30,11 @@ credentials:
     operator_env: MERIDIAN_SUPERVISOR_OPERATOR
     password_env: MERIDIAN_SUPERVISOR_PASSWORD
     branch_env: MERIDIAN_BRANCH
+# Final-action button labels probed from the live application. Matching these
+# during discovery records a human boundary; the model never activates them.
+irreversible_actions:
+  - "Post Transfer"
+  - "Apply Hold"
 detectors:
   session_lost:
     paths: ["/signon"]

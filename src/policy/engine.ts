@@ -88,8 +88,11 @@ export class PolicyEngine {
 // Observational defence-in-depth: classify click intent from the current visible
 // target name when available, otherwise from the saved intent supplied by caller.
 // This heuristic can make policy stricter; it does not replace declared controls.
-export function inferRisk(action: AbstractAction, targetName = ""): RiskTier {
+export function inferRisk(action: AbstractAction, targetName = "", irreversiblePatterns: readonly string[] = []): RiskTier {
   if (action.kind !== "click") return "read_only";
+  // Per-application knowledge first: the generic heuristic cannot know that
+  // this app's "Post Transfer" moves money, but its profile can.
+  if (irreversiblePatterns.some((pattern) => new RegExp(pattern, "i").test(targetName))) return "irreversible";
   if (/delete|close account|transfer funds|wire/i.test(targetName)) return "irreversible";
   if (/confirm|submit|save|open account|create/i.test(targetName) && !/search/i.test(targetName)) return "mutating";
   return "read_only";

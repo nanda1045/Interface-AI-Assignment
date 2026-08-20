@@ -116,7 +116,7 @@ export async function runCapability(options: CapabilityRunOptions): Promise<Capa
     const result = await replay({
       artifact, params: normalizeInputs(artifact.inputs, options.params), surface, policy: policyEngine,
       logger, confirmMutations: options.confirmMutations ?? false,
-      ...(profile ? { signatures: profile.detectors } : {}),
+      ...(profile ? { signatures: profile.detectors, irreversibleActions: profile.irreversible_actions ?? [] } : {}),
       ...(controller ? { handoff: controller } : {})
     });
     return { result, runId: options.runId, reference: resolved.reference };

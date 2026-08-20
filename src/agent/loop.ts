@@ -70,6 +70,9 @@ export async function runDiscovery(options: {
   allowMutations?: boolean;
   expectedOutputs?: string[];
   handoff?: HandoffCoordinator;
+  /** Per-application final-action names from the app profile. A matching click
+   *  is irreversible regardless of what the generic heuristic thinks. */
+  irreversibleActions?: readonly string[];
 }): Promise<DiscoveryResult> {
   const { goal, target, surface, policy, llm, logger } = options;
   const steps: RecordedStep[] = [];
@@ -181,7 +184,7 @@ export async function runDiscovery(options: {
     if (!action) return finish("failure", "Unsupported model decision.");
     const targetElement = "ref" in action ? observation.elements.find((element) => element.ref === action.ref) : undefined;
     if ("ref" in action && !targetElement) return finish("failure", `Model selected stale or unknown ref ${action.ref}.`);
-    const risk = inferRisk(action, targetElement?.name ?? targetElement?.text ?? "");
+    const risk = inferRisk(action, targetElement?.name ?? targetElement?.text ?? "", options.irreversibleActions ?? []);
     const verdict = policy.check(action, { risk, allowMutations: options.allowMutations, targetName: targetElement?.name });
     await logger.event({ type: "policy_check", step, verdict });
     if (!verdict.allowed) {

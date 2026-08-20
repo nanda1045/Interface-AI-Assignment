@@ -22,6 +22,10 @@ export interface ReplayOptions {
   /** Per-application failure/escalation signatures from the app profile.
    *  Defaults to CorePoint's so existing artifacts keep their behaviour. */
   signatures?: DetectorSignatures;
+  /** Per-application irreversible action names, applied to the same risk
+   *  heuristic replay already runs per control - defence in depth against a
+   *  mislabeled artifact whose steps click a final action. */
+  irreversibleActions?: readonly string[];
 }
 
 // Validate the concrete invocation against the artifact's declared input contract
@@ -260,7 +264,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       const stepViolation = artifactPolicyViolation(artifact, action);
       if (stepViolation) return fail("policy_blocked", "An action inside the artifact's own allowlist.", stepViolation);
       const targetElement = resolved ? observation.elements.find((element) => element.ref === resolved?.ref) : undefined;
-      const risk = inferRisk(action, targetElement?.name ?? currentIntent);
+      const risk = inferRisk(action, targetElement?.name ?? currentIntent, options.irreversibleActions ?? []);
       const verdict = policy.check(action, { risk, allowMutations: artifact.capability.status === "approved" || options.confirmMutations, targetName: targetElement?.name });
       await logger.event({ type: "policy_check", step: index + 1, verdict });
       if (!verdict.allowed) return fail("policy_blocked", "An action permitted by policy and risk approval.", verdict.detail);
