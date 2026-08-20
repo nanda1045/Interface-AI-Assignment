@@ -24,6 +24,8 @@ import { PolicyEngine } from "./policy/engine.js";
 import { signOn } from "./profile/bootstrap.js";
 import { profileForOrigin, resolveCredentials } from "./profile/profile.js";
 import { runCapability } from "./run/runner.js";
+import { RunService } from "./run/service.js";
+import { startApiServer } from "./api/server.js";
 import { WebSurface } from "./surface/web-playwright.js";
 
 // Discovery can use either provider through one LLMClient interface. Replay
@@ -318,6 +320,31 @@ program.command("stress")
       rows.push(scoreStress(mutation, result, expected));
     }
     console.log(formatStressReport(rows));
+  });
+
+// SERVE: run the loopback API and operator dashboard on one port. This is the
+// demo surface - capabilities, runs, evidence, chat and interventions - over the
+// same runner every other caller uses.
+program.command("serve")
+  .description("Serve the loopback API and operator dashboard.")
+  .option("--port <port>", "port to bind on 127.0.0.1", "4599")
+  .option("--artifact-root <path>", "artifact directory", "artifacts")
+  .option("--run-root <path>", "run evidence directory", "runs")
+  .option("--policy <path>", "policy YAML", "policies/default.yaml")
+  .option("--demo", "enable demo affordances such as fault injection", false)
+  .action(async (raw: { port: string; artifactRoot: string; runRoot: string; policy: string; demo: boolean }) => {
+    const store = new ArtifactStore(raw.artifactRoot);
+    const runs = new RunService(raw.runRoot);
+    const interventions = new Map<string, RunController>();
+    const { server } = await startApiServer({
+      store, runs, runRoot: raw.runRoot, demoMode: raw.demo, interventions,
+      // The API runs headless replays through the shared runner; attended runs
+      // register their controller in the shared registry the dashboard serves.
+      execute: (options) => runCapability({ ...options, policy: raw.policy, onController: (controller) => interventions.set(options.runId, controller), startConsole: false }),
+      ...(process.env.ANTHROPIC_API_KEY ? { chatApiKey: process.env.ANTHROPIC_API_KEY } : {})
+    }, Number(raw.port));
+    console.error(`Dashboard and API on http://127.0.0.1:${raw.port}${raw.demo ? " (demo mode)" : ""}`);
+    await new Promise<void>((resolve) => server.on("close", resolve));
   });
 
 // Present expected operator errors as concise messages while preserving a

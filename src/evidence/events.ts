@@ -27,6 +27,12 @@ export type RunEvent =
   // A demo fault forced on the entry URL by trusted runner code. Recorded so
   // the evidence explains any resulting business outcome or failure.
   | { type: "fault_injected"; kind: string; url: string }
+  // Wall-clock a step took, so the dashboard can show per-step timings without
+  // reconstructing them from event gaps.
+  | { type: "step_completed"; step: number; stepId: string; durationMs: number }
+  // Recorded once when screenshots stop being captured because a sensitive value
+  // has entered the run; the dashboard explains the gap instead of implying loss.
+  | { type: "screenshots_withheld"; reason: string }
   | { type: "result"; status: "success" | "business_outcome" | "escalated" | "failure"; detail: unknown };
 
 export type PersistedRunEvent = RunEvent & { at: string; runId: string };

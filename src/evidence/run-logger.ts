@@ -32,6 +32,12 @@ export class RunLogger {
     return [...this.sensitiveValues];
   }
 
+  // True once any sensitive value is registered. Discovery uses this to stop
+  // capturing screenshots that would show that value on screen.
+  public hasSensitive(): boolean {
+    return this.sensitiveValues.size > 0;
+  }
+
   // Append one timestamped, run-scoped JSON event after immediate redaction.
   public async event(event: RunEvent): Promise<void> {
     const persisted = redactValue({ ...event, at: new Date().toISOString(), runId: this.runId }, [...this.sensitiveValues]);

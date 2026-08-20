@@ -264,6 +264,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       if (Date.now() > deadline) return fail("timeout", `Replay within ${artifact.policy.max_duration_ms}ms.`, "Capability duration limit was exceeded.");
       currentStep = step.id;
       currentIntent = step.intent;
+      const stepStartedAt = Date.now();
       let observation = await surface.observe();
 
       // Before acting, detect global application/session failures, apply bounded
@@ -379,6 +380,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       if (!(await postconditionsMatch(step, observation))) {
         return fail("postcondition_failed", JSON.stringify(step.postconditions), `Postcondition did not match at ${observation.url}.`);
       }
+      await logger.event({ type: "step_completed", step: index + 1, stepId: step.id, durationMs: Date.now() - stepStartedAt });
     }
   }
   // Every step completed without a restart request; leave the restart loop.

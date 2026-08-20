@@ -81,6 +81,7 @@ export async function runDiscovery(options: {
   const hashVisits = new Map<string, number>();
   let duplicateOutputMarks = 0;
   let consecutiveActionFailures = 0;
+  let screenshotsWithheld = false;
   const startedAt = Date.now();
   // Time spent paused for a human never counts against the run's wall-clock
   // budget: an operator taking minutes at an irreversible boundary is the
@@ -109,7 +110,15 @@ export async function runDiscovery(options: {
 
     // Surface creates a semantic page digest, temporary refs, and state hash.
     // A screenshot may be retained as evidence but is never sent to the model.
-    const observation = await surface.observe({ screenshot: true });
+    // Once a sensitive value has entered the run, screenshots would show it on
+    // screen - unredactable pixels - so they stop being captured, and the gap is
+    // recorded once so the dashboard explains it rather than implying loss.
+    const captureShot = !logger.hasSensitive();
+    if (!captureShot && !screenshotsWithheld) {
+      screenshotsWithheld = true;
+      await logger.event({ type: "screenshots_withheld", reason: "A sensitive value has entered the run; screenshots would show it and cannot be redacted." });
+    }
+    const observation = await surface.observe({ screenshot: captureShot });
 
     // Seeing the same state three times after attempted work indicates a dead
     // end. Prefer same-session human handoff when it is enabled.

@@ -7,10 +7,11 @@
 // and never launch a browser, and the same app can be mounted by the dashboard.
 import express, { type NextFunction, type Request, type Response } from "express";
 import type { Server } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import path from "node:path";
 import { buildCatalog } from "../artifact/catalog.js";
+import { dashboardHtml } from "../dashboard/page.js";
 import type { ArtifactStore } from "../artifact/store.js";
 import type { CapabilityArtifact, ObjectContract } from "../artifact/schema.js";
 import { chat, type CapabilityExecutor } from "../chat/chat.js";
@@ -70,6 +71,10 @@ export function createApiApp(deps: ApiDependencies) {
   const app = express();
   // Bounded body: the API takes small JSON envelopes, never uploads.
   app.use(express.json({ limit: "64kb" }));
+
+  // The operator dashboard, served from this same server so it shares the run
+  // and intervention state rather than running a competing console.
+  app.get("/", (_request, response) => response.type("html").send(dashboardHtml));
 
   // The approved catalog, exactly as an agent or UI would consume it. Drafts are
   // never listed; irreversible capabilities are listed with requires_human.
@@ -237,11 +242,33 @@ export function createApiApp(deps: ApiDependencies) {
     } catch { response.status(400).json({ error: "Invalid run id." }); }
   });
 
+  // Lists this run's evidence file names (a shallow walk of the run directory),
+  // so the dashboard can offer only files that exist. Names only - never contents.
+  app.get("/api/runs/:runId/evidence", async (request, response) => {
+    const runId = runIdSchema.safeParse(request.params.runId);
+    if (!runId.success) { response.status(400).json({ error: "Invalid run id." }); return; }
+    const directory = path.resolve(runRoot, runId.data);
+    try {
+      const entries = await readdir(directory, { withFileTypes: true });
+      const files: string[] = [];
+      for (const entry of entries) {
+        if (entry.isFile()) files.push(entry.name);
+        else if (entry.isDirectory()) {
+          const nested = await readdir(path.join(directory, entry.name)).catch(() => [] as string[]);
+          for (const name of nested) files.push(`${entry.name}/${name}`);
+        }
+      }
+      response.json({ files });
+    } catch { response.status(404).json({ error: "No evidence for this run." }); }
+  });
+
   // Evidence file download with strict path containment: the resolved absolute
   // path must live inside this run's own directory or the request is refused.
-  app.get("/api/runs/:runId/evidence/:file", (request, response) => {
+  // A named wildcard lets a one-level subpath (steps/01.png) through.
+  app.get("/api/runs/:runId/evidence/*file", (request, response) => {
     const runId = runIdSchema.safeParse(request.params.runId);
-    const file = evidenceFileSchema.safeParse(request.params.file);
+    const raw = (request.params as Record<string, unknown>).file;
+    const file = evidenceFileSchema.safeParse(Array.isArray(raw) ? raw.join("/") : String(raw ?? ""));
     if (!runId.success || !file.success) { response.status(400).json({ error: "Invalid evidence path." }); return; }
     const directory = path.resolve(runRoot, runId.data);
     const target = path.resolve(directory, file.data);
@@ -254,13 +281,29 @@ export function createApiApp(deps: ApiDependencies) {
       .pipe(response);
   });
 
+  // Find the registered controller that owns a given intervention id. The
+  // registry is keyed by run, and one attended run holds one coordinator, so a
+  // membership scan is both correct and tiny.
+  const controllerFor = (interventionId: string): RunController | undefined => {
+    for (const controller of interventions.values()) {
+      if (controller.list().some((request) => request.id === interventionId)) return controller;
+    }
+    return undefined;
+  };
+
+  // Every pending intervention across attended runs, for the dashboard's queue.
+  app.get("/api/interventions", (_request, response) => {
+    const all = [...interventions.values()].flatMap((controller) => controller.list());
+    response.json(all);
+  });
+
   // Intervention routes serve a handoff run's shared controller. A read run
   // never registers one, so its id 404s here rather than inventing a coordinator.
   app.post("/api/interventions/:id/take", async (request, response, next) => {
     try {
       const parsed = takeControlSchema.safeParse(request.body);
       if (!parsed.success) { response.status(400).json({ error: "operator is required." }); return; }
-      const controller = interventions.get(String(request.params.id));
+      const controller = controllerFor(String(request.params.id));
       if (!controller) { response.status(404).json({ error: "No active intervention for this run." }); return; }
       response.json(await controller.takeControl(String(request.params.id), parsed.data.operator));
     } catch (error) { next(error); }
@@ -268,7 +311,7 @@ export function createApiApp(deps: ApiDependencies) {
 
   app.post("/api/interventions/:id/hand-back", async (request, response, next) => {
     try {
-      const controller = interventions.get(String(request.params.id));
+      const controller = controllerFor(String(request.params.id));
       if (!controller) { response.status(404).json({ error: "No active intervention for this run." }); return; }
       response.json(await controller.handBack(String(request.params.id)));
     } catch (error) { next(error); }

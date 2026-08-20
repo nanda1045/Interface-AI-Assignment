@@ -92,6 +92,8 @@ describe("deterministic replay against the hostile live app", () => {
     const log = await readFile(path.join(temporaryRoot, "replay_8832_normal", "log.jsonl"), "utf8");
     expect(log).not.toContain("8832");
     expect(log).not.toContain("$3,109.08");
+    // Explicit per-step timing events back the dashboard's timings panel.
+    expect(log).toContain("step_completed");
   });
 
   it("detects a session lost inside the workspace frame, not just at the top level", async () => {

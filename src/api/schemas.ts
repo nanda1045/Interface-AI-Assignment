@@ -9,8 +9,14 @@ import { z } from "zod";
 // value with a slash or a dot-segment never reaches path.join.
 export const runIdSchema = z.string().regex(/^[A-Za-z0-9_]+$/, "A run id is letters, digits and underscores only.");
 
-// An evidence file name: a single path segment, no separators or dot-segments.
-export const evidenceFileSchema = z.string().regex(/^[A-Za-z0-9_.-]+$/, "An evidence file is a single path segment.").refine((value) => value !== "." && value !== "..", "An evidence file cannot be a dot-segment.");
+// An evidence file path: safe characters only, at most one level of directory
+// (steps/01.png, failure/dom.html), and no empty or dot-segment anywhere. The
+// server also resolves and containment-checks the path, so this is the first of
+// two independent defences against traversal.
+export const evidenceFileSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_./-]+$/, "An evidence path uses safe characters only.")
+  .refine((value) => value.split("/").every((segment) => segment !== "" && segment !== "." && segment !== ".."), "An evidence path cannot contain a dot-segment.");
 
 // POST /api/runs. `.strict()` rejects any envelope field we do not know, so a
 // caller cannot smuggle an unexpected control field past validation. Per-input

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -141,6 +141,30 @@ describe("runDiscovery", () => {
     expect(persisted).not.toContain("4521");
     expect(persisted).not.toContain("$2,481.13");
     expect(persisted).toContain("«redacted»");
+  });
+
+  it("stops saving screenshots once a sensitive value is in the run, and records the gap", async () => {
+    // The goal carries a member number, which is marked sensitive before the
+    // loop starts, so screenshots - which would show it on screen and cannot be
+    // redacted - are never captured, and the gap is recorded once.
+    class ShotSurface extends FakeSurface {
+      public override async observe(options?: { screenshot?: boolean }): Promise<Observation> {
+        const base = await super.observe();
+        return options?.screenshot ? base : { ...base, screenshot: undefined };
+      }
+    }
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const logger = new RunLogger("disc_shots", root);
+    const llm = new SequenceClient([
+      { kind: "note_output", ref: "field", name: "member_name", reasoning: "Mark the member name." },
+      { kind: "finish", reasoning: "Done." }
+    ]);
+    await runDiscovery({ goal: "Look up member 4521", target: "http://localhost:4478/desk", surface: new ShotSurface(), policy: new PolicyEngine(config), llm, logger });
+    const log = await readFile(path.join(logger.directory, "log.jsonl"), "utf8");
+    expect(log).toContain("screenshots_withheld");
+    const shots = await readdir(path.join(logger.directory, "steps")).catch(() => [] as string[]);
+    expect(shots.filter((file) => file.endsWith(".png"))).toHaveLength(0);
   });
 
   it("names the acted-on element in history, without the typed value", async () => {

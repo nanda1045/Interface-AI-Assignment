@@ -223,4 +223,34 @@ describe("adaptation API", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(calls[0]?.confirmMutations).toBe(true);
   });
+
+  it("serves the dashboard page from the same server", async () => {
+    await boot();
+    const response = await fetch(`${base}/`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const html = await response.text();
+    expect(html).toContain("MERIDIAN Automation Dashboard");
+    expect(html).toContain("/api/runs");
+  });
+
+  it("lists a run's evidence files including one subdirectory level", async () => {
+    await boot();
+    const runDir = path.join(root, "runs", "replay_ev");
+    await mkdir(path.join(runDir, "steps"), { recursive: true });
+    await writeFile(path.join(runDir, "result.json"), "{}", "utf8");
+    await writeFile(path.join(runDir, "steps", "01.png"), "x", "utf8");
+    const { status, body } = await get("/api/runs/replay_ev/evidence");
+    expect(status).toBe(200);
+    expect((body.files as string[]).sort()).toEqual(["result.json", "steps/01.png"]);
+    // The subpath download works and stays contained.
+    expect((await fetch(`${base}/api/runs/replay_ev/evidence/steps/01.png`)).status).toBe(200);
+  });
+
+  it("aggregates the intervention queue across registered controllers", async () => {
+    await boot();
+    const queue = await get("/api/interventions");
+    expect(queue.status).toBe(200);
+    expect(Array.isArray(queue.body)).toBe(true);
+  });
 });
