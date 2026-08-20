@@ -147,10 +147,13 @@ function renderChat(){
 async function sendChat(message,confirm){
   if(chatBusy)return;
   const text=message!==undefined?message:$('chatinput').value.trim();if(!text)return;
+  // Prior turns as the model sees them, captured BEFORE this message is added,
+  // so a follow-up ("1234") is understood against the question it answers.
+  const history=chatlog.filter(m=>m.text&&m.text!=='… working'&&m.action!=='error').slice(-12).map(m=>({role:m.role==='user'?'user':'assistant',content:String(m.text)}));
   if(message===undefined){chatlog.push({role:'user',text});$('chatinput').value='';}
   chatBusy=true;chatlog.push({role:'bot',text:'… working',action:''});renderChat();
   try{
-    const r=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:text,...(confirm?{confirm:true}:{})})});
+    const r=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:text,history,...(confirm?{confirm:true}:{})})});
     const b=await r.json();chatlog.pop();
     chatlog.push({role:'bot',text:b.reply||b.error||'(no reply)',action:b.action||(b.error?'error':'')});
     pendingMessage=(b.action==='confirmation_required')?text:null;

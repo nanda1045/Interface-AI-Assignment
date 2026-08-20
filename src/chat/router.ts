@@ -14,11 +14,20 @@ export type RouteDecision =
   | { kind: "clarification"; message: string }
   | { kind: "unsupported"; message: string };
 
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface RouteOptions {
   question: string;
   catalog: CatalogEntry[];
   apiKey: string;
   model?: string;
+  /** Prior turns, so a follow-up ("1234") is routed with the context of the
+   *  question it answers instead of being treated as a fresh, contextless
+   *  request. Routing still returns exactly one validated outcome. */
+  history?: ChatTurn[];
   retry?: RetryOptions;
   fetchImpl?: typeof fetch;
 }
@@ -72,7 +81,10 @@ export async function routeQuestion(options: RouteOptions): Promise<RouteDecisio
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${options.apiKey}` },
     body: JSON.stringify({
-      model, store: false, instructions: systemPrompt, input: options.question,
+      model, store: false, instructions: systemPrompt,
+      // The conversation so far, then the new message, so the model can resolve
+      // a follow-up against the question it answers.
+      input: [...(options.history ?? []).map((turn) => ({ role: turn.role, content: turn.content })), { role: "user" as const, content: options.question }],
       tools,
       // Force one function call: the router must return structure, never prose.
       tool_choice: "required",

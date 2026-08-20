@@ -205,6 +205,7 @@ export function createApiApp(deps: ApiDependencies) {
         apiKey: deps.chatApiKey ?? "",
         ...(deps.chatModel ? { model: deps.chatModel } : {}),
         ...(parsed.data.confirm !== undefined ? { confirm: parsed.data.confirm } : {}),
+        ...(parsed.data.history ? { history: parsed.data.history } : {}),
         ...(deps.chatRoute ? { route: deps.chatRoute } : {})
       });
       response.json(result);

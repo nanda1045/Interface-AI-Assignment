@@ -47,13 +47,18 @@ export type RunRequest = z.infer<typeof runRequestSchema>;
 // POST /api/interventions/:id/take
 export const takeControlSchema = z.object({ operator: z.string().min(1) }).strict();
 
-// POST /api/chat. A message, and an optional confirmation the user gives before
-// a data-changing capability runs - deliberately its own envelope field, never
-// something the model can set.
+// POST /api/chat. A message, an optional confirmation the user gives before a
+// data-changing capability runs (its own envelope field, never something the
+// model can set), and the prior turns so a follow-up like "1234" is understood
+// in context instead of restarting the conversation.
 export const chatRequestSchema = z
   .object({
     message: z.string().min(1).max(2000),
-    confirm: z.boolean().optional()
+    confirm: z.boolean().optional(),
+    history: z
+      .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(2000) }).strict())
+      .max(20)
+      .optional()
   })
   .strict();
 

@@ -46,4 +46,18 @@ describe("chat router", () => {
     const fetchImpl = modelReturning([fnCall("delete_everything", {})]);
     expect((await routeQuestion({ ...base, fetchImpl })).kind).toBe("unsupported");
   });
+
+  it("sends prior turns and the new message so a follow-up has context", async () => {
+    let sentBody: { input?: { role: string; content: string }[] } = {};
+    const fetchImpl = (async (_url: string, init: { body: string }) => {
+      sentBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ output: [fnCall("find_members_by_last_name", { last_name: "Turing" })] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await routeQuestion({ ...base, question: "Turing", history: [{ role: "user", content: "find a member by last name" }, { role: "assistant", content: "Which last name?" }], fetchImpl });
+    expect(sentBody.input).toEqual([
+      { role: "user", content: "find a member by last name" },
+      { role: "assistant", content: "Which last name?" },
+      { role: "user", content: "Turing" }
+    ]);
+  });
 });

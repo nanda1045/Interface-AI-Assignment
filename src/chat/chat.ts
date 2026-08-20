@@ -7,7 +7,7 @@ import type { CatalogEntry } from "../artifact/catalog.js";
 import type { RetryOptions } from "../agent/llm/retry.js";
 import type { ReplayResult } from "../replay/result.js";
 import { formatResult } from "./format.js";
-import { routeQuestion, type RouteDecision, type RouteOptions } from "./router.js";
+import { routeQuestion, type ChatTurn, type RouteDecision, type RouteOptions } from "./router.js";
 
 /** Runs one capability and returns its structured result. Injected so the
  *  chatbot is testable without a browser and cannot reach past the shared
@@ -28,6 +28,8 @@ export interface ChatOptions {
   /** The user's explicit confirmation for a data-changing capability. Carried
    *  in the chat envelope, never inferred by the model. */
   confirm?: boolean;
+  /** Prior conversation turns, so a clarifying follow-up is routed in context. */
+  history?: ChatTurn[];
   /** Injectable router for tests; defaults to the real model router. */
   route?: (options: RouteOptions) => Promise<RouteDecision>;
   retry?: RetryOptions;
@@ -54,6 +56,7 @@ export async function chat(options: ChatOptions): Promise<ChatResult> {
     question: options.message,
     catalog: options.catalog,
     apiKey: options.apiKey,
+    ...(options.history ? { history: options.history } : {}),
     ...(options.model ? { model: options.model } : {}),
     ...(options.retry ? { retry: options.retry } : {}),
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
