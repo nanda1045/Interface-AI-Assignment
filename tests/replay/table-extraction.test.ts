@@ -127,4 +127,42 @@ describe("typed table cells", () => {
     expect(result.failure.observed).toContain("not a valid number");
     expect(result.failure.observed).not.toContain("N/A");
   });
+
+  it("redacts a short sensitive cell in evidence but returns it to the caller", async () => {
+    // A two-character share id is below the global-registration length guard, so
+    // structural path-based redaction is what keeps it out of result.json.
+    const shortArtifact: CapabilityArtifact = {
+      ...typedArtifact,
+      outputs: { type: "object", required: ["matches"], properties: { matches: { type: "array", items: { type: "object", properties: { share_id: { type: "string", sensitive: true } } } } } },
+      extract: [{ output: "matches", from: tableTarget, parse: "table", columns: [{ header: "Share", property: "share_id" }] }]
+    };
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-table-"));
+    roots.push(root);
+    const logger = new RunLogger("replay_short", root);
+    const result = await replay({ artifact: shortArtifact, params: {}, surface: new ResultsSurface(["Share"], [["01"]]), policy: new PolicyEngine(config), logger });
+    // The authorized caller still gets the real value.
+    expect(result).toMatchObject({ status: "success", outputs: { matches: [{ share_id: "01" }] } });
+    // Persisted evidence does not.
+    const persisted = await readFile(path.join(logger.directory, "result.json"), "utf8");
+    expect(JSON.parse(persisted).outputs.matches[0].share_id).toBe("«redacted»");
+  });
+});
+
+describe("scalar output privacy", () => {
+  it("redacts a short scalar sensitive value in evidence, any length", async () => {
+    const shortScalar: CapabilityArtifact = {
+      ...artifact,
+      outputs: { type: "object", required: ["code"], properties: { code: { type: "string", sensitive: true } } },
+      extract: [{ output: "code", from: tableTarget, parse: "text" }]
+    };
+    class ScalarSurface extends ResultsSurface {
+      public override async read() { return { text: "01" }; }
+    }
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-table-"));
+    roots.push(root);
+    const logger = new RunLogger("replay_scalar", root);
+    const result = await replay({ artifact: shortScalar, params: {}, surface: new ScalarSurface(["Share"], [["01"]]), policy: new PolicyEngine(config), logger });
+    expect(result).toMatchObject({ status: "success", outputs: { code: "01" } });
+    expect(JSON.parse(await readFile(path.join(logger.directory, "result.json"), "utf8")).outputs.code).toBe("«redacted»");
+  });
 });

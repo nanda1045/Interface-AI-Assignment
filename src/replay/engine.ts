@@ -83,6 +83,32 @@ function artifactPolicyViolation(artifact: CapabilityArtifact, action: AbstractA
   return undefined;
 }
 
+// Build an evidence-safe copy of the outputs. A value marked sensitive in the
+// output contract is replaced with the redaction marker regardless of its
+// length - a two-character share id must not survive into result.json - while
+// the real value is still returned to the authorized caller. This is
+// structural: it redacts the exact declared paths, so it cannot leak by being
+// too short to register globally, nor over-redact unrelated text by registering
+// a short fragment across the whole log.
+const REDACTED = "«redacted»";
+function redactOutputs(outputs: Record<string, unknown>, contract: CapabilityArtifact["outputs"]): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(outputs)) {
+    const declared = contract.properties[name];
+    if (declared?.type === "array" && Array.isArray(value)) {
+      const columns = declared.items.properties;
+      safe[name] = value.map((row) => {
+        if (!row || typeof row !== "object") return row;
+        return Object.fromEntries(Object.entries(row as Record<string, unknown>).map(([key, cell]) =>
+          [key, (declared.sensitive || columns[key]?.sensitive) ? REDACTED : cell]));
+      });
+    } else {
+      safe[name] = declared?.sensitive ? REDACTED : value;
+    }
+  }
+  return safe;
+}
+
 // Convert one table cell to its declared item type. Currency symbols and
 // grouping commas are stripped for numeric cells the way scalar currency
 // extraction already does; anything lossy or ambiguous refuses instead.
@@ -413,8 +439,11 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   // Success returns outputs plus locator stability and intervention telemetry,
   // then completes the same evidence/redaction lifecycle as every other outcome.
   const result: ReplayResult = { status: "success", outputs, evidence: logger.directory, stability: stats, ...interventionPart() };
-  await logger.event({ type: "result", status: "success", detail: result });
-  await logger.result(result);
+  // Persist a structurally redacted copy - short sensitive values included -
+  // but return the real outputs to the authorized caller.
+  const persisted: ReplayResult = { ...result, outputs: redactOutputs(outputs, artifact.outputs) };
+  await logger.event({ type: "result", status: "success", detail: persisted });
+  await logger.result(persisted);
   await logger.finalizeRedaction();
   return result;
 
