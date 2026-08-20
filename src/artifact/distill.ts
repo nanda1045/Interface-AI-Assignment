@@ -239,6 +239,24 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
   if (steps.some((step) => step.execution === "human_required") && options.risk !== "irreversible") {
     throw new Error("Discovery recorded a human_required boundary, so this capability is irreversible. Re-run with --risk irreversible.");
   }
+  // A parameter whose value embeds a sensitive parameter's value is itself
+  // identifying: a share id like "103001-MMKT-4" carries the member number.
+  // Redacting the member number but leaving the share id in the clear at replay
+  // would defeat the protection, so promote it too. Iterated to a fixpoint in
+  // case one embedding value is itself only sensitive by embedding another.
+  for (let changed = true; changed; ) {
+    changed = false;
+    const sensitiveValues = [...sensitiveParams]
+      .map((name) => options.params[name])
+      .filter((value): value is string => typeof value === "string" && value.length >= minimumTaintedLength);
+    for (const [name, value] of Object.entries(options.params)) {
+      if (!sensitiveParams.has(name) && sensitiveValues.some((sensitive) => sensitive !== value && value.includes(sensitive))) {
+        sensitiveParams.add(name);
+        changed = true;
+      }
+    }
+  }
+
   const unbound = Object.keys(options.params).filter((param) => !used.has(param));
   if (unbound.length > 0) throw new Error(`Supplied parameters were never bound: ${unbound.join(", ")}`);
   const outputEntries = Object.entries(result.outputs);

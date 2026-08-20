@@ -39,6 +39,23 @@ describe("distillDiscovery", () => {
     expect(JSON.stringify(artifact)).not.toContain("4521");
   });
 
+  it("promotes an input whose value embeds a sensitive parameter's value", () => {
+    // A share id "4521-MMKT-4" carries the sensitive member number 4521.
+    // Leaving it non-sensitive would surface the member number in replay logs.
+    const artifact = distillDiscovery(
+      runSteps(
+        step({ kind: "type", ref: "e1", text: "4521", sensitive: true }),
+        step({ kind: "select", ref: "e2", value: "4521-MMKT-4" })
+      ),
+      {
+        ...options,
+        params: { member_id: "4521", from_share: "4521-MMKT-4" },
+        inputs: { type: "object", required: ["member_id", "from_share"], properties: { member_id: { type: "string", sensitive: true }, from_share: { type: "string" } } }
+      }
+    );
+    expect(artifact.inputs.properties.from_share).toMatchObject({ sensitive: true });
+  });
+
   it("promotes an input to sensitive when its recorded typing was sensitive", () => {
     // A password named "code" would slip past every name heuristic; the model
     // marked the typing sensitive, and the contract must say so too or replay

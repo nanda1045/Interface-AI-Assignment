@@ -1,0 +1,641 @@
+{
+  "schema_version": "1.0",
+  "capability": {
+    "id": "transfer_funds",
+    "version": "1.0.0",
+    "title": "Transfer funds between shares",
+    "description": "Transfers an amount between two of a member's shares via the review workflow. The final Post Transfer action is performed by a human operator.",
+    "app": {
+      "id": "meridian-core",
+      "vendor": "Cornerstone Financial Systems",
+      "ui_version_range": ">=4.2 <5"
+    },
+    "risk": "irreversible",
+    "status": "draft",
+    "provenance": {
+      "discovered_by": "gpt-5.6-luna",
+      "discovery_run": "disc_20260820T201445Z",
+      "recorded_at": "2026-08-20T20:16:12.582Z",
+      "approved_by": null,
+      "approved_at": null,
+      "input_fingerprint": {
+        "member_number": "54f59b32f6e7a7d8",
+        "from_share": "fa13402c8b525fa9",
+        "to_share": "0d6fd0577c66e445",
+        "amount": "cf9dcf6da8a82be1"
+      },
+      "validation": null
+    }
+  },
+  "inputs": {
+    "type": "object",
+    "required": [
+      "member_number",
+      "from_share",
+      "to_share",
+      "amount"
+    ],
+    "properties": {
+      "member_number": {
+        "type": "string",
+        "sensitive": true
+      },
+      "from_share": {
+        "type": "string",
+        "sensitive": false
+      },
+      "to_share": {
+        "type": "string",
+        "sensitive": false
+      },
+      "amount": {
+        "type": "string",
+        "sensitive": false
+      }
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "required": [
+      "member_transfer_confirmation"
+    ],
+    "properties": {
+      "member_transfer_confirmation": {
+        "type": "array",
+        "sensitive": true,
+        "items": {
+          "type": "object",
+          "properties": {
+            "confirmation": {
+              "type": "string",
+              "sensitive": true
+            },
+            "cn480097": {
+              "type": "string",
+              "sensitive": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "entry": {
+    "url": "https://web-sample.interface-hiring.com/members?next=transfer",
+    "preconditions": [
+      {
+        "kind": "authenticated",
+        "via": "profile sign-on (teller)"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "id": "s1",
+      "intent": "Type {{member_number}} into the target control",
+      "action": {
+        "kind": "type",
+        "value_from": {
+          "param": "member_number"
+        },
+        "sensitive": true
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "attr_css",
+            "value": "input[name=\"q\"]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[1]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.2822509765625,
+              0.1951388888888889,
+              0.15078125,
+              0.024305555555555556
+            ],
+            "nearText": "Value:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "value_equals_param",
+          "param": "member_number"
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "intent": "Click \"Search\"",
+      "action": {
+        "kind": "click"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Search",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[2]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.442095947265625,
+              0.19375,
+              0.045367431640625,
+              0.027083333333333334
+            ],
+            "nearText": "Value:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "url_matches",
+          "pattern": "^https://web-sample\\.interface-hiring\\.com/members\\?next=transfer&by=number&q=[^/?&#]+"
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "intent": "Click \"Select\"",
+      "action": {
+        "kind": "click"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "link",
+            "name": "Select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "text",
+            "value": "Select",
+            "control": "a",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.8
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/table/tbody/tr[2]/td[4]/a",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "url_matches",
+          "pattern": "^https://web-sample\\.interface-hiring\\.com/members/[^/?&#]+/transfer"
+        }
+      ]
+    },
+    {
+      "id": "s4",
+      "intent": "Select {{from_share}} in \"From Share:\"",
+      "action": {
+        "kind": "select",
+        "value_from": {
+          "param": "from_share"
+        }
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "label_proximity",
+            "label": "From Share:",
+            "control": "select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.85
+          },
+          {
+            "kind": "attr_css",
+            "value": "select[name=\"from\"]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[1]/td[2]/select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.29949951171875,
+              0.17708333333333334,
+              0.23984375,
+              0.027083333333333334
+            ],
+            "nearText": "From Share:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "value_equals_param",
+          "param": "from_share"
+        }
+      ]
+    },
+    {
+      "id": "s5",
+      "intent": "Select {{to_share}} in \"To Share:\"",
+      "action": {
+        "kind": "select",
+        "value_from": {
+          "param": "to_share"
+        }
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "label_proximity",
+            "label": "To Share:",
+            "control": "select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.85
+          },
+          {
+            "kind": "attr_css",
+            "value": "select[name=\"to\"]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.29949951171875,
+              0.2125,
+              0.23984375,
+              0.027083333333333334
+            ],
+            "nearText": "To Share:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "value_equals_param",
+          "param": "to_share"
+        }
+      ]
+    },
+    {
+      "id": "s6",
+      "intent": "Type {{amount}} into the target control",
+      "action": {
+        "kind": "type",
+        "value_from": {
+          "param": "amount"
+        }
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "attr_css",
+            "value": "input[name=\"amount\"]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[3]/td[2]/input",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "value_equals_param",
+          "param": "amount"
+        }
+      ]
+    },
+    {
+      "id": "s7",
+      "intent": "Click \"Continue\"",
+      "action": {
+        "kind": "click"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Continue",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[5]/td[2]/input",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.29949951171875,
+              0.33194444444444443,
+              0.054022216796875,
+              0.027083333333333334
+            ],
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "url_matches",
+          "pattern": "^https://web-sample\\.interface-hiring\\.com/members/[^/?&#]+/transfer/review"
+        }
+      ]
+    },
+    {
+      "id": "s8",
+      "intent": "Click \"Post Transfer\"",
+      "action": {
+        "kind": "click"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Post Transfer",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/input[6]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.21484375,
+              0.3680555555555556,
+              0.0715576171875,
+              0.027083333333333334
+            ],
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "execution": "human_required",
+      "postconditions": []
+    }
+  ],
+  "checkpoint": {
+    "assert": [
+      {
+        "kind": "element_present",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "structural",
+              "value": "/html/body/table/tbody/tr[3]/td/div/table",
+              "frame": "main",
+              "unique": true,
+              "confidence": 0.5
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "extract": [
+    {
+      "output": "member_transfer_confirmation",
+      "from": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/div/table",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          }
+        ]
+      },
+      "parse": "table",
+      "columns": [
+        {
+          "header": "Confirmation:",
+          "property": "confirmation"
+        },
+        {
+          "header": "CN480097",
+          "property": "cn480097"
+        }
+      ]
+    }
+  ],
+  "outcomes": [
+    {
+      "code": "INSUFFICIENT_FUNDS",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "Insufficient available balance"
+        }
+      ],
+      "returns": {
+        "posted": false
+      }
+    },
+    {
+      "code": "MEMBER_NOT_FOUND",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "RECORD NOT FOUND|could not be located on this host"
+        }
+      ],
+      "returns": {
+        "found": false
+      }
+    },
+    {
+      "code": "VALIDATION_REJECTED",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "could not be validated|Please correct the following|TRANSACTION REJECTED"
+        }
+      ],
+      "returns": {
+        "posted": false
+      }
+    },
+    {
+      "code": "SIGNON_REJECTED",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "Invalid operator ID or password"
+        }
+      ]
+    }
+  ],
+  "recovery": [],
+  "policy": {
+    "allowed_origins": [
+      "https://web-sample.interface-hiring.com"
+    ],
+    "allowed_actions": [
+      "navigate",
+      "type",
+      "click",
+      "select"
+    ],
+    "max_duration_ms": 120000
+  }
+}
