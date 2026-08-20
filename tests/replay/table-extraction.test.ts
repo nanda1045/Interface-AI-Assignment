@@ -41,7 +41,9 @@ const artifact: CapabilityArtifact = {
   schema_version: "1.0",
   capability: { id: "find_members", version: "1.0.0", title: "Find members", description: "Structured search results.", app: { id: "meridian-core", vendor: "Cornerstone", ui_version_range: ">=4 <5" }, risk: "read_only", status: "approved", provenance: { discovered_by: "test", discovery_run: "test", recorded_at: "2026-08-20T00:00:00.000Z", approved_by: "reviewer", approved_at: "2026-08-20T00:01:00.000Z" } },
   inputs: { type: "object", required: [], properties: {} },
-  outputs: { type: "object", required: ["matches"], properties: { matches: { type: "array", sensitive: true, items: { type: "object", properties: { member_no: { type: "string" }, name: { type: "string" } } } } } },
+  // Deliberately NOT sensitive at the output level: "matches" is an innocuous
+  // name and the privacy lives on the columns that actually carry member data.
+  outputs: { type: "object", required: ["matches"], properties: { matches: { type: "array", items: { type: "object", properties: { member_no: { type: "string", sensitive: true }, name: { type: "string", sensitive: true } } } } } },
   entry: { url: "https://target.test/results", preconditions: [] },
   steps: [{ id: "s1", intent: "Open the results", action: { kind: "scroll", direction: "down" }, wait: { readyWhen: "page_loaded", timeout_ms: 300 }, postconditions: [] }],
   checkpoint: { assert: [{ kind: "element_present", target: tableTarget }] },
@@ -80,10 +82,49 @@ describe("structured table extraction", () => {
     expect(result.failure.observed).toContain("Member No.");
   });
 
-  it("registers sensitive row values so evidence is redacted", async () => {
+  it("redacts sensitive columns even when the output's own name looks harmless", async () => {
+    // The output is called "matches" and is not marked sensitive itself; the
+    // member number and name columns are. Their values must not survive into
+    // persisted evidence raw.
     const { logger } = await run(new ResultsSurface(["Member No.", "Name"], [["100234", "Lovelace, Ada"]]));
     const persisted = await readFile(path.join(logger.directory, "result.json"), "utf8");
+    expect(persisted).not.toContain("100234");
     expect(persisted).not.toContain("Lovelace");
     expect(persisted).toContain("«redacted»");
+  });
+
+  it("refuses a short row instead of fabricating an empty cell", async () => {
+    const { result } = await run(new ResultsSurface(["Member No.", "Name"], [["100234"]]));
+    expect(result).toMatchObject({ status: "failure", failure: { class: "postcondition_failed" } });
+    if (result.status !== "failure") throw new Error("expected failure");
+    expect(result.failure.observed).toContain("has no cell");
+  });
+});
+
+describe("typed table cells", () => {
+  const typedArtifact: CapabilityArtifact = {
+    ...artifact,
+    outputs: { type: "object", required: ["matches"], properties: { matches: { type: "array", items: { type: "object", properties: { member_no: { type: "string", sensitive: true }, balance: { type: "number" }, shares: { type: "integer" } } } } } },
+    extract: [{ output: "matches", from: tableTarget, parse: "table", columns: [{ header: "Member No.", property: "member_no" }, { header: "Balance", property: "balance" }, { header: "Shares", property: "shares" }] }]
+  };
+
+  async function runTyped(surface: Surface) {
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-table-"));
+    roots.push(root);
+    const logger = new RunLogger("replay_typed", root);
+    return replay({ artifact: typedArtifact, params: {}, surface, policy: new PolicyEngine(config), logger });
+  }
+
+  it("parses cells to their declared types, currency symbols included", async () => {
+    const result = await runTyped(new ResultsSurface(["Member No.", "Balance", "Shares"], [["100234", "$1,240.55", "2"]]));
+    expect(result).toMatchObject({ status: "success", outputs: { matches: [{ member_no: "100234", balance: 1240.55, shares: 2 }] } });
+  });
+
+  it("fails plainly on an unparseable numeric cell, without quoting the value", async () => {
+    const result = await runTyped(new ResultsSurface(["Member No.", "Balance", "Shares"], [["100234", "N/A", "2"]]));
+    expect(result).toMatchObject({ status: "failure", failure: { class: "postcondition_failed" } });
+    if (result.status !== "failure") throw new Error("expected failure");
+    expect(result.failure.observed).toContain("not a valid number");
+    expect(result.failure.observed).not.toContain("N/A");
   });
 });

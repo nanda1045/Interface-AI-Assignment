@@ -83,6 +83,29 @@ function artifactPolicyViolation(artifact: CapabilityArtifact, action: AbstractA
   return undefined;
 }
 
+// Convert one table cell to its declared item type. Currency symbols and
+// grouping commas are stripped for numeric cells the way scalar currency
+// extraction already does; anything lossy or ambiguous refuses instead.
+function parseCell(raw: string, type: "string" | "number" | "integer" | "boolean"): { ok: true; value: unknown } | { ok: false } {
+  const text = raw.trim();
+  switch (type) {
+    case "string":
+      return { ok: true, value: raw };
+    case "number": {
+      const cleaned = text.replace(/[^0-9.-]/g, "");
+      const value = Number(cleaned);
+      return cleaned !== "" && Number.isFinite(value) ? { ok: true, value } : { ok: false };
+    }
+    case "integer": {
+      const cleaned = text.replace(/[^0-9-]/g, "");
+      const value = Number(cleaned);
+      return /^-?\d+$/.test(cleaned) && Number.isSafeInteger(value) ? { ok: true, value } : { ok: false };
+    }
+    case "boolean":
+      return /^(true|false)$/i.test(text) ? { ok: true, value: /^true$/i.test(text) } : { ok: false };
+  }
+}
+
 // Record both ladder position and actual strategy kind. Tier is useful within a
 // target; strategy kind is comparable across different steps and runs.
 function recordTier(stats: TierStats, step: string, resolution: ResolvedElement): void {
@@ -131,6 +154,10 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   const deadline = Date.now() + Math.min(artifact.policy.max_duration_ms, policy.config.max_duration_ms);
   let currentStep = "entry";
   let currentIntent = "Open the capability entry point";
+  // Once an action that changes records may have been attempted, re-entry
+  // recoveries are off the table: restarting would run the business action
+  // again, and a duplicated transfer is worse than a stopped run.
+  let mutationMayHaveOccurred = false;
   let lastAttempts: unknown;
   let sensitiveRun = false;
 
@@ -214,8 +241,12 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       }
 
       const recovered = await applyRecovery(observation, index + 1);
-      if (recovered === "restart_capability") continue restartLoop;
-      if (recovered === "retry_current_step") { retryCurrentStep = true; continue; }
+      if (recovered === "restart_capability" || recovered === "retry_current_step") {
+        if (mutationMayHaveOccurred) return fail("precondition_failed", "A recovery path that cannot repeat a business action.", "Recovery would re-run steps after a record-changing action may already have been attempted; verify the application state before retrying.");
+        if (recovered === "restart_capability") continue restartLoop;
+        retryCurrentStep = true;
+        continue;
+      }
       if (recovered === "continue") observation = await surface.observe();
       const preEscalation = detectEscalation(observation, signatures);
       if (preEscalation && options.handoff) {
@@ -250,8 +281,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
         if (!options.handoff) return fail("policy_blocked", "An attached operator handoff for the human-required step.", "This step must be performed by a person and no handoff is attached.");
         const resume = await requestHandoff(step, observation, "This step is irreversible and must be performed by a person.", step.intent);
         if (resume === "timed_out") return fail("timeout", "A human operator to take control of the paused run.", "The intervention request expired with no operator.");
-        if (resume === "checkpoint") break stepsLoop;
-        if (resume === "completed") break;
+        if (resume === "checkpoint") { mutationMayHaveOccurred = true; break stepsLoop; }
+        if (resume === "completed") { mutationMayHaveOccurred = true; break; }
         if (resume === "retry") {
           return fail("precondition_failed", "The human-required step performed by the operator.", "Control was handed back but the irreversible step was not performed.");
         }
@@ -269,6 +300,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       await logger.event({ type: "policy_check", step: index + 1, verdict });
       if (!verdict.allowed) return fail("policy_blocked", "An action permitted by policy and risk approval.", verdict.detail);
       const actionResult = await surface.act(action);
+      if (risk !== "read_only") mutationMayHaveOccurred = true;
       await logger.event({ type: "action", step: index + 1, action, resultUrl: actionResult.url });
       observation = await observeAfterAction(surface, observation.stateHash, step.wait.timeout_ms);
 
@@ -287,8 +319,12 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       const outcome = await detectOutcome(step.id, observation);
       if (outcome) return outcome;
       const recoveredAfter = await applyRecovery(observation, index + 1);
-      if (recoveredAfter === "restart_capability") continue restartLoop;
-      if (recoveredAfter === "retry_current_step") { retryCurrentStep = true; continue; }
+      if (recoveredAfter === "restart_capability" || recoveredAfter === "retry_current_step") {
+        if (mutationMayHaveOccurred) return fail("precondition_failed", "A recovery path that cannot repeat a business action.", "Recovery would re-run steps after a record-changing action may already have been attempted; verify the application state before retrying.");
+        if (recoveredAfter === "restart_capability") continue restartLoop;
+        retryCurrentStep = true;
+        continue;
+      }
       if (recoveredAfter === "continue") observation = await surface.observe();
       const escalation = detectEscalation(observation, signatures);
       if (escalation && options.handoff) {
@@ -333,11 +369,33 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       if (missing.length > 0) {
         return fail("postcondition_failed", `Table columns for ${extraction.output}: ${columns.map((column) => column.header).join(", ")}.`, `Columns not present: ${missing.map((column) => column.header).join(", ")}.`);
       }
-      const rows = snapshot.rows.map((row) => Object.fromEntries(columns.map((column) => [column.property, row[headerIndex.get(column.header.trim().toLowerCase())!] ?? ""])));
-      if (artifact.outputs.properties[extraction.output]?.sensitive) {
-        // Same guard as capture: registering very short fragments would redact
-        // every occurrence of them across the whole evidence file.
-        for (const row of rows) for (const value of Object.values(row)) if (String(value).trim().length >= 4) logger.markSensitive(String(value).trim());
+      const declaredOutput = artifact.outputs.properties[extraction.output];
+      const itemProperties = declaredOutput?.type === "array" ? declaredOutput.items.properties : {};
+      const rows: Record<string, unknown>[] = [];
+      for (const [rowIndex, row] of snapshot.rows.entries()) {
+        const entry: Record<string, unknown> = {};
+        for (const column of columns) {
+          const cell = row[headerIndex.get(column.header.trim().toLowerCase())!];
+          // A short row means the table's shape is not what the artifact
+          // recorded. An empty-string substitute would fabricate data.
+          if (cell === undefined) {
+            return fail("postcondition_failed", `A value under "${column.header}" in every row of ${extraction.output}.`, `Row ${rowIndex + 1} has no cell under "${column.header}".`);
+          }
+          const declaredCell = itemProperties[column.property];
+          // Sensitivity lives on columns, not on the output's name: a table
+          // called "matches" still carries member numbers and names. Register
+          // before parsing so even a parse failure's evidence is redacted.
+          // Short fragments are skipped - registering "2" would redact every 2.
+          if ((declaredOutput?.sensitive || declaredCell?.sensitive) && cell.trim().length >= 4) logger.markSensitive(cell.trim());
+          const parsed = parseCell(cell, declaredCell?.type ?? "string");
+          if (!parsed.ok) {
+            // The raw value is deliberately not quoted here: an unparseable
+            // sensitive cell must not leak through a failure message.
+            return fail("postcondition_failed", `Column "${column.header}" of ${extraction.output} parseable as ${declaredCell?.type ?? "string"}.`, `Row ${rowIndex + 1}'s value under "${column.header}" is not a valid ${declaredCell?.type ?? "string"}.`);
+          }
+          entry[column.property] = parsed.value;
+        }
+        rows.push(entry);
       }
       outputs[extraction.output] = rows;
       continue;

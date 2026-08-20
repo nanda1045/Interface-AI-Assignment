@@ -94,6 +94,48 @@ async function run(artifact: CapabilityArtifact, surface: Surface) {
   return replay({ artifact, params: {}, surface, policy: new PolicyEngine(config), logger });
 }
 
+// A mutating flow: clicking "Confirm Payment" posts something, and THEN the
+// maintenance interstitial appears. Re-entering would post it again.
+class MutationThenMaintenanceSurface implements Surface {
+  public entries = 0;
+  private screen: "form" | "maintenance" = "form";
+
+  public async observe(): Promise<Observation> {
+    const text = this.screen === "form" ? "PAYMENT FORM Confirm Payment" : "SCHEDULED MAINTENANCE IN PROGRESS Continue";
+    return {
+      url: `https://target.test/${this.screen}`, title: "Meridian",
+      frames: [{ path: "main", url: `https://target.test/${this.screen}` }],
+      elements: [
+        { ref: "text", frame: "main", role: "heading", name: text, text, state: { visible: true, enabled: true }, bboxPct: [0, 0, 1, 0.1], hints: {} },
+        { ref: "button", frame: "main", role: "button", name: this.screen === "form" ? "Confirm Payment" : "Continue", text: this.screen === "form" ? "Confirm Payment" : "Continue", state: { visible: true, enabled: true }, bboxPct: [0, 0.2, 0.2, 0.05], hints: {} }
+      ],
+      stateHash: `${this.screen}-${this.entries}`
+    };
+  }
+
+  public async act(action: AbstractAction) {
+    if (action.kind === "navigate") this.entries += 1;
+    // The mutating click "posts" and the maintenance window swallows the result.
+    else if (action.kind === "click" && this.screen === "form") this.screen = "maintenance";
+    return { ok: true as const, url: `https://target.test/${this.screen}` };
+  }
+
+  public async resolve(target: TargetSpec) {
+    const first = target.strategies[0];
+    const wanted = first?.kind === "text" ? first.value : first?.kind === "role_name" ? first.name : "";
+    const observation = await this.observe();
+    const found = observation.elements.find((element) => element.name === wanted);
+    if (!found) return { ok: false as const, reason: "target_not_found" as const, attempts: [] };
+    return { ok: true as const, ref: found.ref, frame: "main", matchedStrategy: first!, tier: 1, attempts: [] };
+  }
+
+  public async captureLocators(): Promise<LocatorBundle> { throw new Error("not used"); }
+  public async read() { return { text: "value" }; }
+  public async readTable() { return { headers: [], rows: [] }; }
+  public async snapshotDom() { return "<html></html>"; }
+  public async close() {}
+}
+
 describe("bounded recovery effects", () => {
   it("restart_capability re-enters from the entry URL and completes", async () => {
     const surface = new MaintenanceSurface();
@@ -101,6 +143,26 @@ describe("bounded recovery effects", () => {
     expect(result).toMatchObject({ status: "success", outputs: { value: "value" } });
     // One entry that hit maintenance, one clean re-entry after the recovery.
     expect(surface.entries).toBe(2);
+  });
+
+  it("refuses to restart once a record-changing action may have been attempted", async () => {
+    // Same maintenance page, same declared recovery - but this time the
+    // interstitial appeared AFTER a mutating click. Re-entering from the top
+    // would run the payment again, so the run stops with verify_then_retry
+    // instead of quietly double-posting.
+    const surface = new MutationThenMaintenanceSurface();
+    const confirmTarget = { frame: "main", strategies: [{ kind: "role_name" as const, role: "button", name: "Confirm Payment", frame: "main", unique: true as const, confidence: 0.9 }] };
+    const mutating: CapabilityArtifact = {
+      ...artifactWith("restart_capability"),
+      capability: { ...artifactWith("restart_capability").capability, id: "pay_case", risk: "mutating" },
+      steps: [{ id: "s1", intent: "Confirm the payment", action: { kind: "click" }, target: confirmTarget, wait: { readyWhen: "target_resolvable", timeout_ms: 300 }, postconditions: [{ kind: "text_visible", pattern: "RESULT READY" }] }]
+    };
+    const result = await run(mutating, surface);
+    expect(result).toMatchObject({ status: "failure", failure: { class: "precondition_failed", disposition: "verify_then_retry" } });
+    if (result.status !== "failure") throw new Error("expected failure");
+    expect(result.failure.observed).toContain("may already have been attempted");
+    // No second entry navigation ever happened.
+    expect(surface.entries).toBe(1);
   });
 
   it("a plain continue recovery cannot rescue an interstitial that exits the flow", async () => {

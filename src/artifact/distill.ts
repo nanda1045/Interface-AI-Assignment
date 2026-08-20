@@ -202,7 +202,13 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
   // Known bounded recovery is explicit in the artifact rather than improvised by
   // the model during replay. Templates come from the app profile at authoring
   // time; the copied rules are what reviewers approve and replay follows.
-  const recovery: CapabilityArtifact["recovery"] = options.recoveryTemplates ?? corePointRecoveryTemplates;
+  // Re-entry recoveries can never run safely once a business action may have
+  // posted - the engine refuses them at that point - so a capability that
+  // changes records does not carry rules that could only ever fail.
+  const recoveryTemplates = options.recoveryTemplates ?? corePointRecoveryTemplates;
+  const recovery: CapabilityArtifact["recovery"] = (options.risk ?? "read_only") === "read_only"
+    ? recoveryTemplates
+    : recoveryTemplates.filter((rule) => (rule.effect ?? "continue") === "continue");
 
   // Derive least privilege from recorded steps plus engine-driven entry and
   // recovery actions; do not grant every action supported by the platform.
@@ -222,7 +228,14 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
     properties: Object.fromEntries(Object.entries(options.outputs.properties).map(([name, declared]) => {
       const marked = result.outputs[name];
       if (!marked?.table) return [name, declared];
-      const items = Object.fromEntries(columnsFor(marked.table.headers).map((column) => [column.property, { type: "string" as const }]));
+      // Sensitivity belongs to columns, not to the output's name: "matches" is
+      // innocuous and its member-number column is not. The declared output
+      // sensitivity still blankets every column when set.
+      const sensitiveColumn = /member|name|balance|account|share|ssn/i;
+      const items = Object.fromEntries(columnsFor(marked.table.headers).map((column) => [column.property, {
+        type: "string" as const,
+        ...((declared.sensitive || sensitiveColumn.test(column.property)) ? { sensitive: true } : {})
+      }]));
       return [name, { type: "array" as const, ...(declared.sensitive ? { sensitive: true } : {}), items: { type: "object" as const, properties: items } }];
     }))
   };

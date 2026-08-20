@@ -129,6 +129,35 @@ describe("distillDiscovery", () => {
     });
   });
 
+  it("marks member-data columns sensitive even under an innocuous output name", () => {
+    const artifact = distillDiscovery(
+      { ...result, outputs: { matches: { locators: locator, table: { headers: ["Member No.", "Name", "Shares"] } } } },
+      { ...options, outputs: { type: "object", required: ["matches"], properties: { matches: { type: "string" } } } }
+    );
+    const declared = artifact.outputs.properties.matches;
+    if (declared?.type !== "array") throw new Error("expected an array contract");
+    expect(declared.items.properties.member_no?.sensitive).toBe(true);
+    expect(declared.items.properties.name?.sensitive).toBe(true);
+    // "shares" matches the share-id pattern too. The heuristic errs toward
+    // privacy: the cost is redacting a harmless count, the alternative risks
+    // persisting a raw share id.
+    expect(declared.items.properties.shares?.sensitive).toBe(true);
+  });
+
+  it("gives a record-changing capability only recoveries that cannot re-run it", () => {
+    // Re-entry recoveries are refused at runtime once a mutation may have been
+    // attempted, so shipping them in a mutating capability only adds rules
+    // that can never succeed.
+    const templates = [
+      { id: "dismiss", condition: { kind: "dialog_present" as const, textPattern: "x" }, action: { kind: "click" as const, target: { strategies: [locator.strategies[0]!] } }, max_attempts: 1 },
+      { id: "reenter", condition: { kind: "text_visible" as const, pattern: "y" }, action: { kind: "click" as const, target: { strategies: [locator.strategies[0]!] } }, max_attempts: 1, effect: "restart_capability" as const }
+    ];
+    const mutating = distillDiscovery(result, { ...options, risk: "mutating", recoveryTemplates: templates });
+    expect(mutating.recovery.map((rule) => rule.id)).toEqual(["dismiss"]);
+    const readOnly = distillDiscovery(result, { ...options, recoveryTemplates: templates });
+    expect(readOnly.recovery.map((rule) => rule.id)).toEqual(["dismiss", "reenter"]);
+  });
+
   it("refuses the artifact when run data emptied a ladder", () => {
     expect(() => distillDiscovery(runWith({ locators: bundle(roleName("View account 4521-01")) }), options))
       .toThrow(/step 1 was built from run-specific data/);
