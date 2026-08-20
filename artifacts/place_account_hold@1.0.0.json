@@ -1,0 +1,579 @@
+{
+  "schema_version": "1.0",
+  "capability": {
+    "id": "place_account_hold",
+    "version": "1.0.0",
+    "title": "Place account hold",
+    "description": "Places a hold with a reason code on a member's share via the review workflow. Requires supervisor authority; the final Apply Hold action is performed by a human operator.",
+    "app": {
+      "id": "meridian-core",
+      "vendor": "Cornerstone Financial Systems",
+      "ui_version_range": ">=4.2 <5"
+    },
+    "risk": "irreversible",
+    "status": "approved",
+    "provenance": {
+      "discovered_by": "gpt-5.6-luna",
+      "discovery_run": "disc_20260820T204209Z",
+      "recorded_at": "2026-08-20T20:42:34.982Z",
+      "approved_by": "reviewer@interface.test",
+      "approved_at": "2026-08-20T20:44:25.249Z",
+      "input_fingerprint": {
+        "member_number": "54f59b32f6e7a7d8",
+        "share": "b3b10e053a6ce005",
+        "reason": "ab0730acb114a4ef"
+      },
+      "validation": {
+        "run": "approval_20260820T204355Z",
+        "validated_at": "2026-08-20T20:44:25.249Z",
+        "outcome": "success",
+        "reused_params": [
+          "reason"
+        ],
+        "matched_tiers": {
+          "1": 8
+        }
+      }
+    }
+  },
+  "inputs": {
+    "type": "object",
+    "required": [
+      "member_number",
+      "share",
+      "reason"
+    ],
+    "properties": {
+      "member_number": {
+        "type": "string",
+        "sensitive": true
+      },
+      "share": {
+        "type": "string",
+        "sensitive": true
+      },
+      "reason": {
+        "type": "string",
+        "sensitive": false
+      }
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "required": [
+      "account_hold_confirmation"
+    ],
+    "properties": {
+      "account_hold_confirmation": {
+        "type": "string",
+        "sensitive": true
+      }
+    }
+  },
+  "entry": {
+    "url": "https://web-sample.interface-hiring.com/members?next=hold",
+    "preconditions": [
+      {
+        "kind": "authenticated",
+        "via": "profile sign-on (supervisor)"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "id": "s1",
+      "intent": "Type {{member_number}} into the target control",
+      "action": {
+        "kind": "type",
+        "value_from": {
+          "param": "member_number"
+        },
+        "sensitive": true
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "attr_css",
+            "value": "input[name=\"q\"]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[1]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.2822509765625,
+              0.1951388888888889,
+              0.15078125,
+              0.024305555555555556
+            ],
+            "nearText": "Value:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "value_equals_param",
+          "param": "member_number"
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "intent": "Click \"Search\"",
+      "action": {
+        "kind": "click"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Search",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[2]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.442095947265625,
+              0.19375,
+              0.045367431640625,
+              0.027083333333333334
+            ],
+            "nearText": "Value:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "url_matches",
+          "pattern": "^https://web-sample\\.interface-hiring\\.com/members\\?next=hold&by=number&q=[^/?&#]+"
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "intent": "Click \"Select\"",
+      "action": {
+        "kind": "click"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "link",
+            "name": "Select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "text",
+            "value": "Select",
+            "control": "a",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.8
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/table/tbody/tr[2]/td[4]/a",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "url_matches",
+          "pattern": "^https://web-sample\\.interface-hiring\\.com/members/[^/?&#]+/hold"
+        }
+      ]
+    },
+    {
+      "id": "s4",
+      "intent": "Select {{share}} in \"Share:\"",
+      "action": {
+        "kind": "select",
+        "value_from": {
+          "param": "share"
+        }
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "label_proximity",
+            "label": "Share:",
+            "control": "select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.85
+          },
+          {
+            "kind": "attr_css",
+            "value": "select[name=\"share\"]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[1]/td[2]/select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.30582275390625,
+              0.17708333333333334,
+              0.204296875,
+              0.027083333333333334
+            ],
+            "nearText": "Share:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "value_equals_param",
+          "param": "share"
+        }
+      ]
+    },
+    {
+      "id": "s5",
+      "intent": "Select {{reason}} in \"Reason Code:\"",
+      "action": {
+        "kind": "select",
+        "value_from": {
+          "param": "reason"
+        }
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "label_proximity",
+            "label": "Reason Code:",
+            "control": "select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.85
+          },
+          {
+            "kind": "attr_css",
+            "value": "select[name=\"reason\"]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.30582275390625,
+              0.2125,
+              0.155859375,
+              0.027083333333333334
+            ],
+            "nearText": "Reason Code:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "value_equals_param",
+          "param": "reason"
+        }
+      ]
+    },
+    {
+      "id": "s6",
+      "intent": "Click \"Continue\"",
+      "action": {
+        "kind": "click"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Continue",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[4]/td[2]/input",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.30582275390625,
+              0.29930555555555555,
+              0.054022216796875,
+              0.027083333333333334
+            ],
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": [
+        {
+          "kind": "url_matches",
+          "pattern": "^https://web-sample\\.interface-hiring\\.com/members/[^/?&#]+/hold/review"
+        }
+      ]
+    },
+    {
+      "id": "s7",
+      "intent": "Click \"Apply Hold\"",
+      "action": {
+        "kind": "click"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Apply Hold",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/input[5]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.21484375,
+              0.34097222222222223,
+              0.062060546875,
+              0.027083333333333334
+            ],
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "execution": "human_required",
+      "postconditions": []
+    }
+  ],
+  "checkpoint": {
+    "assert": [
+      {
+        "kind": "element_present",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "structural",
+              "value": "/html/body/table/tbody/tr[3]/td/div/table",
+              "frame": "main",
+              "unique": true,
+              "confidence": 0.5
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "extract": [
+    {
+      "output": "account_hold_confirmation",
+      "from": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/div/table",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          }
+        ]
+      },
+      "parse": "text"
+    }
+  ],
+  "outcomes": [
+    {
+      "code": "INSUFFICIENT_FUNDS",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "Insufficient available balance"
+        }
+      ],
+      "returns": {
+        "posted": false
+      }
+    },
+    {
+      "code": "MEMBER_NOT_FOUND",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "RECORD NOT FOUND|could not be located on this host"
+        }
+      ],
+      "returns": {
+        "found": false
+      }
+    },
+    {
+      "code": "VALIDATION_REJECTED",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "could not be validated|Please correct the following|TRANSACTION REJECTED"
+        }
+      ],
+      "returns": {
+        "posted": false
+      }
+    },
+    {
+      "code": "SIGNON_REJECTED",
+      "at_steps": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7"
+      ],
+      "when": [
+        {
+          "kind": "text_visible",
+          "pattern": "Invalid operator ID or password"
+        }
+      ]
+    }
+  ],
+  "recovery": [],
+  "policy": {
+    "allowed_origins": [
+      "https://web-sample.interface-hiring.com"
+    ],
+    "allowed_actions": [
+      "navigate",
+      "type",
+      "click",
+      "select"
+    ],
+    "max_duration_ms": 120000
+  }
+}
