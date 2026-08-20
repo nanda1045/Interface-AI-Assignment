@@ -87,21 +87,23 @@ part of the safety model:
 | `transfer 5 dollars for member 103001` | explains it **pauses for a human** and never runs from chat |
 | `reset the wifi password` | fails closed as unsupported |
 
-**3. Run an irreversible capability with a human boundary** (headed browser + operator console):
+**3. Run an irreversible capability with a human boundary**, driven from the dashboard. Start it as an
+**attended** run (the acknowledgement that an operator is present); the server opens a headed browser,
+walks to the final button, and pauses:
 
 ```bash
-npm run cli -- discover \
-  --goal "Transfer funds ... click the Post Transfer button - the system will pause ..." \
-  --url "https://web-sample.interface-hiring.com/members?next=transfer" \
-  --provider openai --allow-mutations --risk irreversible --handoff --console-port 4590 \
-  --policy policies/meridian.yaml --auth teller --capability-id transfer_funds \
-  --param member_number=103001 --param from_share=103001-MMKT-4 --param to_share=103001-MMKT-3 --param amount=1.00 \
-  --output member_transfer_confirmation
+curl -s http://127.0.0.1:4599/api/runs -H 'content-type: application/json' \
+  -d '{"capability":"transfer_funds",
+       "inputs":{"member_number":"100987","from_share":"100987-MMKT-5","to_share":"100987-S0001-4","amount":"1.00"},
+       "attended":true}'
 ```
 
-The machine fills the form, reaches **Post Transfer**, and pauses. Open the operator console it prints,
-take control, click the button in the browser, and hand back. The dashboard shows the run as
-"Escalated — waiting for human" throughout, and the persisted evidence stays redacted.
+The dashboard shows the run as **"Escalated — waiting for human"**; its Interventions panel offers
+**Take control**, you click **Post Transfer** in the headed browser, then **Hand back** — the run
+finishes with a captured confirmation and redacted evidence. The unattended run endpoint (no
+`attended` flag) refuses irreversible work outright. The same handoff is also available through the
+CLI's own console: `npm run cli -- replay transfer_funds@1.0.0 --auth teller --handoff …` (use two
+OPEN shares for the member).
 
 Fault injection (demo mode only) forces a MERIDIAN `?inject=` condition on the entry page — e.g.
 `POST /api/runs` with `"fault_injection": "maintenance"` (bounded recovery) or `"server"` (a
