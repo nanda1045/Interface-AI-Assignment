@@ -71,4 +71,13 @@ describe("chat orchestration", () => {
     expect(result.reply).toContain("human operator");
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it("explains the human boundary before asking for missing inputs on an irreversible request", async () => {
+    // "transfer 5 dollars for member 103001" with no shares must not ask for the
+    // shares as if it would then transfer; it can never run from chat.
+    const execute = vi.fn() as unknown as CapabilityExecutor;
+    const result = await chat(base(execute, { kind: "capability", name: "transfer_funds", inputs: {} }));
+    expect(result.action).toBe("human_required");
+    expect(execute).not.toHaveBeenCalled();
+  });
 });

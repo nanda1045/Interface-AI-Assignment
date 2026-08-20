@@ -69,18 +69,19 @@ export async function chat(options: ChatOptions): Promise<ChatResult> {
   // Router already validated against the catalog; this is a fail-closed backstop.
   if (!entry) return { reply: "I could not match your request to an available capability.", action: "unsupported" };
 
-  // A missing required input is a request for clarification, never a guess.
-  const missing = entry.tool.input_schema.required.filter((name) => route.inputs[name] === undefined || route.inputs[name] === null);
-  if (missing.length > 0) return { reply: `I need ${missing.join(" and ")} to do that.`, action: "clarification" };
-
-  // Irreversible: explain the human boundary. The chatbot cannot satisfy it -
-  // a person must complete the final step in an attended session.
+  // Irreversible first, BEFORE asking for any inputs: the chatbot can never
+  // complete it regardless of what is supplied, so collecting more details
+  // would falsely imply it could. Say plainly that it needs a human.
   if (entry.requires_human) {
     return {
       reply: `${entry.reference} moves or locks money and pauses for a human operator to complete the final step. I can't do that from chat — it needs the attended operator console.`,
       action: "human_required"
     };
   }
+
+  // A missing required input is a request for clarification, never a guess.
+  const missing = entry.tool.input_schema.required.filter((name) => route.inputs[name] === undefined || route.inputs[name] === null);
+  if (missing.length > 0) return { reply: `I need ${missing.join(" and ")} to do that.`, action: "clarification" };
 
   // Ordinary mutation: show what would change and require confirmation first.
   if (entry.risk === "mutating" && options.confirm !== true) {

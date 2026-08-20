@@ -50,9 +50,10 @@ const metaTools = [
 
 const systemPrompt = `You route a back-office banking request to exactly one action. You MUST call exactly one function and never reply in prose.
 
-- To do the work, call the matching capability function with only the inputs the user actually supplied.
-- Never invent or guess an identifier (member number, share id, amount). If a required input is missing, call ${CLARIFY} naming what you need.
-- If no capability fits the request, call ${UNSUPPORTED}.
+- When the request clearly matches a capability, call that capability function with only the inputs the user actually supplied - even if some required inputs are still missing. The system handles missing inputs, confirmations, and human approval; you do not.
+- Never invent or guess an identifier (member number, share id, amount). Pass only what the user gave.
+- Call ${CLARIFY} ONLY when you cannot tell which capability the user wants.
+- Call ${UNSUPPORTED} when no capability fits the request.
 - You are choosing an action only. You never see results and never write the final answer.`;
 
 function messageText(input: unknown): string {
