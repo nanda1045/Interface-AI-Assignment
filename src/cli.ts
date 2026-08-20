@@ -20,6 +20,7 @@ import { installHumanRecorder } from "./control/human-recorder.js";
 import { mutationById, uiMutations } from "./eval/mutations.js";
 import { formatStressReport, scoreStress, type StressRow } from "./eval/stress.js";
 import { createRunId, RunLogger } from "./evidence/run-logger.js";
+import { ask } from "./invoke/ask.js";
 import { PolicyEngine } from "./policy/engine.js";
 import { replay } from "./replay/engine.js";
 import type { ReplayResult } from "./replay/result.js";
@@ -303,6 +304,37 @@ program.command("capabilities")
       console.log(`  ${entry.tool.description}`);
       console.log(`  takes (${inputs})\n`);
     }
+  });
+
+program.command("ask")
+  .description("Answer a question by letting a model pick an approved capability and replaying it deterministically.")
+  .argument("<question>", "a plain-language question")
+  .option("--policy <path>", "policy YAML", "policies/default.yaml")
+  .option("--artifact-root <path>", "artifact directory", "artifacts")
+  .option("--mock-auth", "bootstrap a fictional CorePoint training session", false)
+  .option("--headless", "run the capability without a visible browser", false)
+  .option("--allow-mutations", "permit answering with a capability that changes records", false)
+  .option("--run-root <path>", "run evidence directory", "runs")
+  .action(async (question: string, raw: { policy: string; artifactRoot: string; mockAuth: boolean; headless: boolean; allowMutations: boolean; runRoot: string }) => {
+    if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is required to answer a question.");
+    const catalog = buildCatalog(await new ArtifactStore(raw.artifactRoot).approved());
+    if (catalog.length === 0) throw new Error("No approved capabilities to answer with. Approve one first.");
+    const result = await ask({
+      question, catalog, apiKey: process.env.ANTHROPIC_API_KEY, allowMutations: raw.allowMutations,
+      // The model chooses which capability; this runs it through exactly the
+      // path every other caller uses, with no model in the decision loop.
+      execute: async (reference, params) => {
+        console.error(`Invoking ${reference} with ${JSON.stringify(params)}`);
+        const { result: replayed } = await runReplay({
+          reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, headless: raw.headless,
+          mockAuth: raw.mockAuth, runRoot: raw.runRoot, runId: createRunId("replay"),
+          confirmMutations: raw.allowMutations
+        });
+        console.error(`→ ${replayed.status}`);
+        return replayed;
+      }
+    });
+    console.log(result.answer);
   });
 
 program.command("stress")

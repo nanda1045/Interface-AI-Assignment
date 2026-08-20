@@ -110,6 +110,48 @@ The outcome is written into `capability.provenance.validation` — which run, wh
 
 A mutating capability genuinely performs its mutation during validation, so approve those against test data.
 
+## Invoking a capability as an agent would
+
+The brief's through-line is that the model discovers, the artifact becomes a reusable capability, and deterministic replay is how an AI agent invokes it in production. These two commands are that third step.
+
+`capabilities` publishes what the system can do in the shape a calling model expects. It is a projection, not a second contract: the typed inputs, typed outputs and description were written for a human reviewer and turn out to be exactly what a model needs.
+
+```bash
+npm run cli -- capabilities          # human summary
+npm run cli -- capabilities --json   # the tool definitions themselves
+```
+
+Only **approved** capabilities appear, and only their newest approved version — the same rule that stops a bare name resolving to a draft. Irreversible capabilities are omitted entirely, since replay refuses them unattended and offering one would advertise a call guaranteed to fail.
+
+`ask` shows one being invoked:
+
+```bash
+npm run cli -- ask "What is member 8832's regular savings balance?" --mock-auth
+```
+
+```
+Invoking lookup_member_savings_balance@1.1.0 with {"member_id":"8832"}
+→ success
+Member 8832, Sam Example, has a regular savings balance of $3,109.08.
+```
+
+**The model decides which capability to run. The recorded artifact decides how it runs.** The model never sees the browser, never chooses a control and cannot improvise a step; it picks a name from a list and proposes arguments, and everything after that is the same deterministic replay every other caller uses — which is why the lint rule keeping models out of `src/replay/` still holds. `ask` sits above the engine and calls it.
+
+Three behaviours worth trying:
+
+```bash
+# a legitimate "no such member" is reported as fact, not as an error
+npm run cli -- ask "What is member 9999's savings balance?" --mock-auth
+
+# a capability that changes records is refused unless explicitly permitted
+npm run cli -- ask "Open a Holiday Savings sub-account for member 4521 with a 25.00 opening deposit." --mock-auth
+
+# nothing in the catalog fits
+npm run cli -- ask "What is the weather in San Francisco?" --mock-auth
+```
+
+The first is the three-way result contract earning its keep: because a business outcome is a distinct shape rather than an exception, the model can tell "that member does not exist" apart from "the automation broke" and answers accordingly.
+
 ## Manual test checklist
 
 Keep `npm run app` running, then execute these one at a time. They write local evidence to the ignored `/runs/` directory.
