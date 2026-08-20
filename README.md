@@ -1,10 +1,19 @@
 # CorePoint Computer-Use Automation
 
+> ### 📍 Reviewing the MERIDIAN adaptation? Start with **[`ADAPTATION.md`](ADAPTATION.md)**.
+> It is the adaptation write-up, organized to the evaluation criteria (adaptation quality, the core
+> loop, robustness, the task contract, safety, escalation, trade-offs). To drive it:
+> `npm run serve:meridian` → `http://127.0.0.1:4599`, or jump to the
+> [MERIDIAN adaptation demo](#meridian-adaptation-demo) below. Same-day proof is in
+> [`evidence/meridian/`](evidence/meridian/).
+>
+> The rest of this README documents the **base** CorePoint system the adaptation builds on.
+
 An end-to-end computer-use system that uses an LLM to discover a workflow against a live legacy-style banking UI, distills the run into a typed capability artifact, and replays that artifact deterministically without a model in the decision loop.
 
 The target is a fictional CorePoint teller console with iframes, table layouts, sparse semantics, two tenant variants, and deterministic runtime faults. All names, member records, credentials, and balances in this repository are test data.
 
-The same engine is adapted to a live hosted legacy target, **MERIDIAN CORE**, with eight recorded capabilities exposed as capabilities → API → chatbot → dashboard. See [`ADAPTATION.md`](ADAPTATION.md) and the [MERIDIAN adaptation demo](#meridian-adaptation-demo) below.
+The same engine is adapted to a live hosted legacy target, **MERIDIAN CORE**, with eight recorded capabilities exposed as capabilities → API → chatbot → dashboard.
 
 ## Requirements
 
