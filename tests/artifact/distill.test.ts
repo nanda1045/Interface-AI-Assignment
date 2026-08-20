@@ -158,6 +158,15 @@ describe("distillDiscovery", () => {
     expect(readOnly.recovery.map((rule) => rule.id)).toEqual(["dismiss", "reenter"]);
   });
 
+  it("demands --risk irreversible when discovery recorded a human boundary", () => {
+    const withBoundary: DiscoveryResult = {
+      ...result,
+      steps: [...result.steps, { step: 2, reasoning: "Post it", action: { kind: "click", ref: "e2" }, locators: locator, beforeUrl: "http://localhost:4478/desk", afterUrl: "http://localhost:4478/desk", execution: "human_required" }]
+    };
+    expect(() => distillDiscovery(withBoundary, options)).toThrow(/Re-run with --risk irreversible/);
+    expect(() => distillDiscovery(withBoundary, { ...options, risk: "irreversible" })).not.toThrow();
+  });
+
   it("refuses the artifact when run data emptied a ladder", () => {
     expect(() => distillDiscovery(runWith({ locators: bundle(roleName("View account 4521-01")) }), options))
       .toThrow(/step 1 was built from run-specific data/);

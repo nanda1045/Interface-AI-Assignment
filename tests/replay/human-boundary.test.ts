@@ -115,7 +115,20 @@ describe("the irreversible human boundary", () => {
     const result = await replay({ artifact: unbounded, params: {}, surface: new ReviewSurface(), policy: new PolicyEngine(config), logger: await loggerIn(), handoff: new HumanPostsCoordinator(() => undefined) });
     expect(result).toMatchObject({ status: "failure", failure: { class: "policy_blocked" } });
     if (result.status !== "failure") throw new Error("expected failure");
-    expect(result.failure.observed).toContain("no human_required step");
+    expect(result.failure.observed).toContain("not a targeted human_required boundary");
+  });
+
+  it("refuses at runtime when the boundary is not the final step", async () => {
+    // Defence in depth for an artifact that never went through the store: an
+    // agent-executed step after the boundary would do the irreversible work.
+    const trailing: CapabilityArtifact = {
+      ...artifact,
+      steps: [artifact.steps[0]!, { id: "s2", intent: "Tidy up", action: { kind: "scroll", direction: "down" }, wait: { readyWhen: "page_loaded", timeout_ms: 100 }, postconditions: [] }]
+    };
+    const result = await replay({ artifact: trailing, params: {}, surface: new ReviewSurface(), policy: new PolicyEngine(config), logger: await loggerIn(), handoff: new HumanPostsCoordinator(() => undefined) });
+    expect(result).toMatchObject({ status: "failure", failure: { class: "policy_blocked" } });
+    if (result.status !== "failure") throw new Error("expected failure");
+    expect(result.failure.observed).toContain("final step is not a targeted human_required boundary");
   });
 
   it("verifies the boundary screen, pauses, and completes from the human's work", async () => {

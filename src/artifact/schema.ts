@@ -224,6 +224,15 @@ export const capabilityArtifactSchema = strict({
   // (the capability checkpoint is the completion proof for a final step). The
   // runtime enforces this too - this check keeps a malformed artifact from ever
   // being stored as reviewable.
+  // The implication runs both ways. A human boundary in a capability whose
+  // declared risk is not irreversible would list in the catalog as
+  // requires_human: false - a capability that pauses for a person while
+  // claiming it does not. Rejection is chosen over silently deriving the risk:
+  // the tier is a reviewed declaration, not something a recording infers.
+  const humanBounded = artifact.steps.some((step) => step.execution === "human_required");
+  if (humanBounded && artifact.capability.risk !== "irreversible") {
+    context.addIssue({ code: "custom", path: ["capability", "risk"], message: "A capability with a human_required step must declare risk irreversible; record it with --risk irreversible." });
+  }
   if (artifact.capability.risk === "irreversible") {
     const last = artifact.steps[artifact.steps.length - 1];
     const humanIndex = artifact.steps.findIndex((step) => step.execution === "human_required");

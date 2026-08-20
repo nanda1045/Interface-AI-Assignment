@@ -180,6 +180,9 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
     return !(next && repeatsNextValue(step, next));
   });
   const steps = recorded.map((step, index) => distillStep(step, index, options.params, used, tainted));
+  if (steps.some((step) => step.execution === "human_required") && options.risk !== "irreversible") {
+    throw new Error("Discovery recorded a human_required boundary, so this capability is irreversible. Re-run with --risk irreversible.");
+  }
   const unbound = Object.keys(options.params).filter((param) => !used.has(param));
   if (unbound.length > 0) throw new Error(`Supplied parameters were never bound: ${unbound.join(", ")}`);
   const outputEntries = Object.entries(result.outputs);

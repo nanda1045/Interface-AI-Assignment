@@ -87,6 +87,17 @@ describe("irreversible human-boundary validation", () => {
     }))).not.toThrow();
   });
 
+  it("rejects a human boundary inside a capability that does not declare irreversible risk", () => {
+    // Otherwise the catalog would list a capability that pauses for a person
+    // as requires_human: false - the mismatch --risk's default makes easy.
+    for (const risk of ["read_only", "mutating"] as const) {
+      expect(() => capabilityArtifactSchema.parse(shaped((artifact) => {
+        artifact.capability.risk = risk;
+        artifact.steps = [artifact.steps[0]!, humanStep()];
+      }))).toThrow(/must declare risk irreversible/);
+    }
+  });
+
   it("rejects an irreversible artifact with no human_required step", () => {
     expect(() => capabilityArtifactSchema.parse(shaped((artifact) => { artifact.capability.risk = "irreversible"; })))
       .toThrow(/must record a human_required step/);

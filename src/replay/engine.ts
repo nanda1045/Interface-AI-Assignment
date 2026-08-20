@@ -188,14 +188,19 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     // Never unattended, and no CLI or API boolean can override this. It runs
     // only when a human boundary is genuinely present: an operator handoff is
     // attached AND the artifact records where the machine must stop.
-    const humanBounded = artifact.steps.some((step) => step.execution === "human_required");
+    // Mirrors the schema validation exactly, as defence in depth for an
+    // artifact that never went through the store: the boundary must be the
+    // FINAL step and must carry a target, or an agent-executed step after it
+    // would perform the irreversible work unattended.
+    const finalStep = artifact.steps[artifact.steps.length - 1];
+    const humanBounded = finalStep?.execution === "human_required" && finalStep.target !== undefined;
     if (!options.handoff || !humanBounded) {
       return fail(
         "policy_blocked",
-        "A human-controlled boundary: an attached operator handoff and a recorded human_required step.",
+        "A human-controlled boundary: an attached operator handoff and a final, targeted human_required step.",
         humanBounded
           ? "No operator handoff is attached; irreversible capabilities never run unattended."
-          : "The artifact records no human_required step, so its irreversible action would execute unattended."
+          : "The artifact's final step is not a targeted human_required boundary, so its irreversible action would execute unattended."
       );
     }
   }
