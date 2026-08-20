@@ -78,15 +78,16 @@ describe("answering a question by invoking a capability", () => {
       .rejects.toThrow(/not in the catalog: transfer_funds/);
   });
 
-  it("coerces the arguments the model proposed, and lets replay validate them", async () => {
-    // A model may answer with a number where the contract says string. Replay
-    // checks the values against the artifact's own input contract either way.
+  it("passes the model's arguments through untouched for contract-aware normalization", async () => {
+    // Blind stringification here would let a model satisfy a boolean with
+    // "true" or an integer with "12.5". The runner normalizes against the
+    // artifact's declared contract; replay validates the result.
     const execute = vi.fn(async () => succeeded);
     await ask({
       ...base, catalog: catalogOf(), execute,
       fetchImpl: modelReturning(picks({ member_id: 8832 }), says("Done."))
     });
-    expect(execute).toHaveBeenCalledWith("lookup_balance@1.0.0", { member_id: "8832" });
+    expect(execute).toHaveBeenCalledWith("lookup_balance@1.0.0", { member_id: 8832 });
   });
 
   it("answers directly when no capability is needed", async () => {

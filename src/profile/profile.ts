@@ -36,7 +36,8 @@ const recoveryTemplateSchema = strict({
   id: z.string(),
   condition: predicateSchema,
   action: strict({ kind: z.literal("click"), target: targetSchema }),
-  max_attempts: z.number().int().positive()
+  max_attempts: z.number().int().positive(),
+  effect: z.enum(["continue", "retry_current_step", "restart_capability"]).optional()
 });
 
 export const appProfileSchema = strict({

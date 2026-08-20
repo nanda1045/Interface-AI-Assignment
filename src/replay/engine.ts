@@ -159,14 +159,20 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   const entryAction: AbstractAction = { kind: "navigate", url: artifact.entry.url };
   const entryViolation = artifactPolicyViolation(artifact, entryAction);
   if (entryViolation) return fail("policy_blocked", "An entry URL inside the artifact's own allowlist.", entryViolation);
+
+  // A recovery rule with effect restart_capability re-enters here: some
+  // interstitials (MERIDIAN's maintenance page) exit to a menu, so the only
+  // sound resumption is from the capability's own entry. Bounded by the rule's
+  // max_attempts and the run deadline like every other recovery.
+  restartLoop: while (true) {
   const entryVerdict = policy.check(entryAction, { risk: "read_only" });
   await logger.event({ type: "policy_check", step: 0, verdict: entryVerdict });
   if (!entryVerdict.allowed) return fail("policy_blocked", "Allowlisted capability entry URL.", entryVerdict.detail);
   const entryResult = await surface.act(entryAction);
   await logger.event({ type: "action", step: 0, action: entryAction, resultUrl: entryResult.url });
 
-  // Follow saved steps in order. The inner loop exists only so a human handoff can
-  // return control and request that the current step be retried from fresh state.
+  // Follow saved steps in order. The inner loop exists only so a human handoff or
+  // a retry_current_step recovery can re-run the current step from fresh state.
   stepsLoop: for (const [index, step] of artifact.steps.entries()) {
     let retryCurrentStep = true;
     while (retryCurrentStep) {
@@ -190,7 +196,9 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       }
 
       const recovered = await applyRecovery(observation, index + 1);
-      if (recovered) observation = await surface.observe();
+      if (recovered === "restart_capability") continue restartLoop;
+      if (recovered === "retry_current_step") { retryCurrentStep = true; continue; }
+      if (recovered === "continue") observation = await surface.observe();
       const preEscalation = detectEscalation(observation, signatures);
       if (preEscalation && options.handoff) {
         const resume = await requestHandoff(step, observation, preEscalation.reason, preEscalation.requestedAction);
@@ -242,7 +250,10 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       }
       const outcome = await detectOutcome(step.id, observation);
       if (outcome) return outcome;
-      if (await applyRecovery(observation, index + 1)) observation = await surface.observe();
+      const recoveredAfter = await applyRecovery(observation, index + 1);
+      if (recoveredAfter === "restart_capability") continue restartLoop;
+      if (recoveredAfter === "retry_current_step") { retryCurrentStep = true; continue; }
+      if (recoveredAfter === "continue") observation = await surface.observe();
       const escalation = detectEscalation(observation, signatures);
       if (escalation && options.handoff) {
         const resume = await requestHandoff(step, observation, escalation.reason, escalation.requestedAction);
@@ -256,6 +267,9 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
         return fail("postcondition_failed", JSON.stringify(step.postconditions), `Postcondition did not match at ${observation.url}.`);
       }
     }
+  }
+  // Every step completed without a restart request; leave the restart loop.
+  break restartLoop;
   }
 
   // Steps alone do not prove success. Require the capability-level checkpoint,
@@ -303,28 +317,32 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
 
   // Apply only artifact-declared, attempt-bounded recovery. Recovery actions pass
   // the same capability and deployment policy checks as normal steps.
-  async function applyRecovery(observation: Observation, stepNumber: number): Promise<boolean> {
+  // Returns the applied rule's declared effect, or "none" when nothing matched
+  // or the rule was exhausted/blocked. The caller decides what the effect means
+  // for control flow; this function only performs the bounded click.
+  async function applyRecovery(observation: Observation, stepNumber: number): Promise<"none" | "continue" | "retry_current_step" | "restart_capability"> {
     for (const rule of artifact.recovery) {
       if (!(await predicateMatches(rule.condition, observation, surface))) continue;
       const attempts = recoveryAttempts.get(rule.id) ?? 0;
-      if (attempts >= rule.max_attempts) return false;
+      if (attempts >= rule.max_attempts) return "none";
       recoveryAttempts.set(rule.id, attempts + 1);
       const resolution = await surface.resolve(rule.action.target);
       lastAttempts = resolution.attempts;
-      if (!resolution.ok) return false;
+      if (!resolution.ok) return "none";
       recordTier(stats, `recovery:${rule.id}`, resolution);
       const action: AbstractAction = { kind: "click", ref: resolution.ref };
-      if (artifactPolicyViolation(artifact, action)) return false;
+      if (artifactPolicyViolation(artifact, action)) return "none";
       const verdict = policy.check(action, { risk: "read_only" });
       await logger.event({ type: "policy_check", step: stepNumber, verdict });
-      if (!verdict.allowed) return false;
+      if (!verdict.allowed) return "none";
       const actionResult = await surface.act(action);
       await logger.event({ type: "action", step: stepNumber, action, resultUrl: actionResult.url });
       await logger.event({ type: "recovery_applied", step: stepNumber, rule: rule.id });
-      return true;
+      return rule.effect ?? "continue";
     }
-    return false;
+    return "none";
   }
+
 
   // Verify every saved postcondition. Input-value checks re-resolve the target and
   // compare the live control value with the invocation parameter.

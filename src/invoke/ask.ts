@@ -9,7 +9,7 @@ import type { ReplayResult } from "../replay/result.js";
 /** Runs one capability and returns its result. Injected so this module is
  *  testable without a browser, and so it cannot reach past the same replay
  *  path every other caller uses. */
-export type CapabilityExecutor = (reference: string, params: Record<string, string>) => Promise<ReplayResult>;
+export type CapabilityExecutor = (reference: string, params: Record<string, unknown>) => Promise<ReplayResult>;
 
 export interface AskOptions {
   question: string;
@@ -26,7 +26,7 @@ export interface AskOptions {
 
 export interface AskResult {
   answer: string;
-  invoked?: { reference: string; params: Record<string, string>; status: ReplayResult["status"] };
+  invoked?: { reference: string; params: Record<string, unknown>; status: ReplayResult["status"] };
 }
 
 type ContentBlock =
@@ -56,12 +56,13 @@ function toolResultFor(result: ReplayResult): string {
   return JSON.stringify({ status: "failure", class: result.failure.class, disposition: result.failure.disposition, observed: result.failure.observed });
 }
 
-// The model proposes arguments; it does not get to define them. Values are
-// coerced to the strings a capability invocation takes, and replay validates
-// them against the artifact's own input contract before acting on anything.
-function toParams(input: unknown): Record<string, string> {
+// The model proposes arguments; it does not get to define them. Values pass
+// through untouched: the runner normalizes them against the artifact's declared
+// contract, and replay validates them - blind stringification here would let a
+// model satisfy a boolean with "true" or an integer with "12.5".
+function toParams(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== "object") return {};
-  return Object.fromEntries(Object.entries(input as Record<string, unknown>).map(([name, value]) => [name, String(value)]));
+  return { ...(input as Record<string, unknown>) };
 }
 
 function textOf(content: ContentBlock[] | undefined): string {

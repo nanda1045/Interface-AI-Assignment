@@ -79,7 +79,13 @@ const recoverySchema = strict({
   id: z.string(),
   condition: predicateSchema,
   action: strict({ kind: z.literal("click"), target: targetSchema }),
-  max_attempts: z.number().int().positive()
+  max_attempts: z.number().int().positive(),
+  // What the recovery click achieves. "continue" is the classic dismissed
+  // modal: the interrupted screen is still there. Some interstitials exit the
+  // flow entirely - MERIDIAN's maintenance Continue lands on the main menu -
+  // so a rule can declare that the step must be retried or the capability
+  // restarted from its entry. Absent means "continue".
+  effect: z.enum(["continue", "retry_current_step", "restart_capability"]).optional()
 });
 
 // Complete immutable capability document: identity/provenance, contracts, entry,

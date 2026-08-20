@@ -71,9 +71,9 @@ outcome_templates:
       - kind: text_visible
         pattern: "Invalid operator ID or password"
 recovery_templates:
-  # The Continue link exits to /menu, so this recovery alone cannot resume the
-  # interrupted step; the bounded recovery effects added for this target are
-  # what make it usable. Until then it stays a declared, reviewable rule.
+  # The Continue link exits to /menu, so a click alone cannot resume the
+  # interrupted step: the declared effect restarts the capability from its
+  # entry, bounded by max_attempts and the run deadline.
   - id: maintenance_continue
     condition:
       kind: text_visible
@@ -89,3 +89,4 @@ recovery_templates:
             unique: true
             confidence: 0.8
     max_attempts: 2
+    effect: restart_capability

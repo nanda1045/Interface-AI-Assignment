@@ -3,6 +3,7 @@
 // capabilities through this path, so none of them can acquire an easier route
 // than production replay - the same reason approval's gate lives in the store.
 import { chromium } from "playwright";
+import { normalizeInputs } from "../artifact/inputs.js";
 import { applyOverlay, loadOverlay } from "../artifact/overlay.js";
 import { ArtifactStore } from "../artifact/store.js";
 import { startConsole } from "../control/console-server.js";
@@ -20,7 +21,10 @@ import { WebSurface } from "../surface/web-playwright.js";
 // enable test or operational features without changing the replay engine.
 export interface CapabilityRunOptions {
   reference: string;
-  params: Record<string, string>;
+  /** Raw invocation values. Callers arrive with different physics - the CLI
+   *  sends strings, a model or API client sends real JSON types - so values
+   *  are normalized against the artifact's declared contract before replay. */
+  params: Record<string, unknown>;
   runId: string;
   policy?: string;
   artifactRoot?: string;
@@ -110,7 +114,7 @@ export async function runCapability(options: CapabilityRunOptions): Promise<Capa
     }
     options.onStarted?.({ reference: resolved.reference });
     const result = await replay({
-      artifact, params: options.params, surface, policy: policyEngine,
+      artifact, params: normalizeInputs(artifact.inputs, options.params), surface, policy: policyEngine,
       logger, confirmMutations: options.confirmMutations ?? false,
       ...(profile ? { signatures: profile.detectors } : {}),
       ...(controller ? { handoff: controller } : {})
