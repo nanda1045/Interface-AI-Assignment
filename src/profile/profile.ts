@@ -102,7 +102,6 @@ function assertPatternsCompile(profile: AppProfile): void {
   ];
   for (const [path, pattern] of patterns) {
     try {
-      // eslint-disable-next-line no-new
       new RegExp(pattern);
     } catch (error) {
       throw new Error(`Profile ${profile.app.id} has an invalid regular expression at ${path}: ${(error as Error).message}`);
