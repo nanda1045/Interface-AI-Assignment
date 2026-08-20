@@ -16,6 +16,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root,
 // interrupted screen), and only a fresh entry navigation reaches the form.
 class MaintenanceSurface implements Surface {
   public entries = 0;
+  public navUrls: string[] = [];
   private screen: "maintenance" | "menu" | "form" | "done" = "maintenance";
 
   public async observe(): Promise<Observation> {
@@ -39,6 +40,7 @@ class MaintenanceSurface implements Surface {
   public async act(action: AbstractAction) {
     if (action.kind === "navigate") {
       this.entries += 1;
+      this.navUrls.push(action.url);
       // The maintenance window has cleared by the second entry.
       this.screen = this.entries === 1 ? "maintenance" : "form";
     } else if (action.kind === "click" && this.screen === "maintenance") {
@@ -87,11 +89,11 @@ function artifactWith(effect: "restart_capability" | undefined): CapabilityArtif
 
 const config: PolicyConfig = { allowed_origins: ["https://target.test"], allowed_path_patterns: ["^/.*$"], allowed_actions: ["navigate", "click"], max_steps: 10, max_duration_ms: 5_000, risk: { discovery_mutations: "block", irreversible: "escalate" } };
 
-async function run(artifact: CapabilityArtifact, surface: Surface) {
+async function run(artifact: CapabilityArtifact, surface: Surface, extra: { faultInjection?: string } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-recovery-"));
   roots.push(root);
   const logger = new RunLogger("replay_recovery", root);
-  return replay({ artifact, params: {}, surface, policy: new PolicyEngine(config), logger });
+  return replay({ artifact, params: {}, surface, policy: new PolicyEngine(config), logger, ...extra });
 }
 
 // A mutating flow: clicking "Confirm Payment" posts something, and THEN the
@@ -143,6 +145,16 @@ describe("bounded recovery effects", () => {
     expect(result).toMatchObject({ status: "success", outputs: { value: "value" } });
     // One entry that hit maintenance, one clean re-entry after the recovery.
     expect(surface.entries).toBe(2);
+  });
+
+  it("applies a demo fault to the first entry only, so a restart re-enters clean", async () => {
+    // Fault injection is one-shot. If the injected parameter rode along on every
+    // restart, a transient interstitial would re-trigger until recovery gave up.
+    const surface = new MaintenanceSurface();
+    const result = await run(artifactWith("restart_capability"), surface, { faultInjection: "maintenance" });
+    expect(result).toMatchObject({ status: "success" });
+    expect(surface.navUrls[0]).toContain("inject=maintenance");
+    expect(surface.navUrls[1]).not.toContain("inject=");
   });
 
   it("refuses to restart once a record-changing action may have been attempted", async () => {

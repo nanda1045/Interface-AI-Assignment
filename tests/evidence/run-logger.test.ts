@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { RunLogger } from "../../src/evidence/run-logger.js";
+import { createRunId, RunLogger } from "../../src/evidence/run-logger.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => {
@@ -36,5 +36,17 @@ describe("RunLogger.finalizeRedaction", () => {
 
     const result = JSON.parse(await readFile(path.join(logger.directory, "result.json"), "utf8")) as { outputs: { savings_balance: string } };
     expect(result.outputs.savings_balance).toBe("«redacted»");
+  });
+});
+
+describe("createRunId", () => {
+  it("gives two runs distinct ids even within the same millisecond", () => {
+    const now = new Date("2026-08-20T22:30:15.123Z");
+    const a = createRunId("replay", now);
+    const b = createRunId("replay", now);
+    // Same timestamp, but the counter keeps them apart, so two rapid API runs
+    // never collide onto one evidence directory.
+    expect(a).not.toBe(b);
+    expect(a.startsWith("replay_")).toBe(true);
   });
 });

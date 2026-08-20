@@ -122,6 +122,14 @@ export class RunLogger {
 }
 
 // Human-readable UTC run ID used as the evidence directory name.
+// A process-local counter guarantees two run ids differ even within the same
+// millisecond, so rapid API runs never collide onto one evidence directory.
+let runIdCounter = 0;
+
 export function createRunId(prefix: "disc" | "replay" | "approval", now = new Date()): string {
-  return `${prefix}_${now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")}`;
+  // Keep milliseconds (drop only the separators) and append a short counter, so
+  // two runs enqueued in the same second get distinct ids and directories.
+  const stamp = now.toISOString().replace(/[-:.]/g, "");
+  runIdCounter = (runIdCounter + 1) % 1000;
+  return `${prefix}_${stamp}_${String(runIdCounter).padStart(3, "0")}`;
 }

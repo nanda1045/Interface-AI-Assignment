@@ -26,6 +26,17 @@ export interface ReplayOptions {
    *  heuristic replay already runs per control - defence in depth against a
    *  mislabeled artifact whose steps click a final action. */
   irreversibleActions?: readonly string[];
+  /** Demo-only fault kind to force on the FIRST entry navigation via the app's
+   *  ?inject= mechanism. It is one-shot: a restart_capability recovery re-enters
+   *  with the clean entry, so a transient interstitial cannot re-trigger forever. */
+  faultInjection?: string;
+}
+
+// Append the demo ?inject= parameter to a URL. Used for the first entry only.
+function withInject(url: string, kind: string): string {
+  const injected = new URL(url);
+  injected.searchParams.set("inject", kind);
+  return injected.toString();
 }
 
 // Validate the concrete invocation against the artifact's declared input contract
@@ -248,12 +259,19 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   // interstitials (MERIDIAN's maintenance page) exit to a menu, so the only
   // sound resumption is from the capability's own entry. Bounded by the rule's
   // max_attempts and the run deadline like every other recovery.
+  let firstEntry = true;
   restartLoop: while (true) {
-  const entryVerdict = policy.check(entryAction, { risk: "read_only" });
+  // The demo fault is forced on the first entry only; a restart re-enters clean,
+  // so a transient interstitial recovers instead of looping until it fails.
+  const thisEntry: AbstractAction = firstEntry && options.faultInjection
+    ? { kind: "navigate", url: withInject(artifact.entry.url, options.faultInjection) }
+    : entryAction;
+  firstEntry = false;
+  const entryVerdict = policy.check(thisEntry, { risk: "read_only" });
   await logger.event({ type: "policy_check", step: 0, verdict: entryVerdict });
   if (!entryVerdict.allowed) return fail("policy_blocked", "Allowlisted capability entry URL.", entryVerdict.detail);
-  const entryResult = await surface.act(entryAction);
-  await logger.event({ type: "action", step: 0, action: entryAction, resultUrl: entryResult.url });
+  const entryResult = await surface.act(thisEntry);
+  await logger.event({ type: "action", step: 0, action: thisEntry, resultUrl: entryResult.url });
 
   // Follow saved steps in order. The inner loop exists only so a human handoff or
   // a retry_current_step recovery can re-run the current step from fresh state.
