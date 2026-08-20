@@ -14,7 +14,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test:meridian": "vitest run --config vitest.meridian.config.ts"
+    "test:meridian": "vitest run --config vitest.meridian.config.ts",
+    "serve": "tsx src/cli.ts serve",
+    "serve:meridian": "tsx src/cli.ts serve --auth teller --demo"
   },
   "dependencies": {
     "commander": "^15.0.0",

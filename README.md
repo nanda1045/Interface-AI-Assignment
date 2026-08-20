@@ -4,6 +4,8 @@ An end-to-end computer-use system that uses an LLM to discover a workflow agains
 
 The target is a fictional CorePoint teller console with iframes, table layouts, sparse semantics, two tenant variants, and deterministic runtime faults. All names, member records, credentials, and balances in this repository are test data.
 
+The same engine is adapted to a live hosted legacy target, **MERIDIAN CORE**, with eight recorded capabilities exposed as capabilities → API → chatbot → dashboard. See [`ADAPTATION.md`](ADAPTATION.md) and the [MERIDIAN adaptation demo](#meridian-adaptation-demo) below.
+
 ## Requirements
 
 - Node.js 20 or newer
@@ -55,6 +57,55 @@ npm run cli -- replay lookup_member_savings_balance \
 Naming a capability without a version resolves to the newest **approved** one, and the run prints and records which version it selected. A range works too (`@1`, `@1.x`, `@1.2`). Pinning an exact version is an explicit act and reaches a draft, so you can replay something you have just recorded — but a caller that names a capability can never be handed one nobody reviewed.
 
 The browser is headed by default so you can watch it. Add `--headless` for unattended execution. A successful result contains `member_name`, `savings_balance`, locator-tier stability telemetry, and an evidence directory.
+
+## MERIDIAN adaptation demo
+
+The same engine is adapted to a live hosted legacy target, **MERIDIAN CORE**, with eight recorded
+capabilities exposed as capabilities → API → chatbot → dashboard. The adaptation and its design are
+written up in [`ADAPTATION.md`](ADAPTATION.md). Live runs need MERIDIAN credentials in `.env`
+(`MERIDIAN_OPERATOR`, `MERIDIAN_PASSWORD`, `MERIDIAN_BRANCH`, and the `MERIDIAN_SUPERVISOR_*` pair)
+and `OPENAI_API_KEY` for the chatbot.
+
+**1. Start the dashboard and API** (loopback only) on `http://127.0.0.1:4599`:
+
+```bash
+npm run serve:meridian     # = serve --auth teller --demo
+```
+
+The dashboard shows the approved catalog, live and past run history (discovery, approval, and replay),
+per-run detail with step timings and redacted evidence, the intervention queue, and a chat panel.
+
+**2. Try the chatbot** (in the dashboard chat box, or via `POST /api/chat`). Each shows a different
+part of the safety model:
+
+| Message | What it demonstrates |
+|---|---|
+| `find members with the last name Turing` | successful lookup with structured matches |
+| `look up member 999999 by number` | member-not-found as a **business outcome**, not an error |
+| `look up a member` | asks for clarification instead of guessing |
+| `update member 103001 phone to 555-0170` | data change gated behind **confirm-to-run** |
+| `transfer 5 dollars for member 103001` | explains it **pauses for a human** and never runs from chat |
+| `reset the wifi password` | fails closed as unsupported |
+
+**3. Run an irreversible capability with a human boundary** (headed browser + operator console):
+
+```bash
+npm run cli -- discover \
+  --goal "Transfer funds ... click the Post Transfer button - the system will pause ..." \
+  --url "https://web-sample.interface-hiring.com/members?next=transfer" \
+  --provider openai --allow-mutations --risk irreversible --handoff --console-port 4590 \
+  --policy policies/meridian.yaml --auth teller --capability-id transfer_funds \
+  --param member_number=103001 --param from_share=103001-MMKT-4 --param to_share=103001-MMKT-3 --param amount=1.00 \
+  --output member_transfer_confirmation
+```
+
+The machine fills the form, reaches **Post Transfer**, and pauses. Open the operator console it prints,
+take control, click the button in the browser, and hand back. The dashboard shows the run as
+"Escalated — waiting for human" throughout, and the persisted evidence stays redacted.
+
+Fault injection (demo mode only) forces a MERIDIAN `?inject=` condition on the entry page — e.g.
+`POST /api/runs` with `"fault_injection": "maintenance"` (bounded recovery) or `"server"` (a
+structured technical failure). Valid kinds come from the profile's allow-list.
 
 ## Live LLM discovery
 
@@ -231,23 +282,35 @@ Expected: the same run resumes at the satisfied checkpoint and returns success w
 ```bash
 npm run typecheck
 npm run lint
-npm test
+npm test              # fully offline; never touches the hosted MERIDIAN app
+npm run test:meridian # opt-in live checks; self-skip without MERIDIAN credentials
 ```
 
-The suite covers the live hostile iframe surface, locator ladders, schema validation, parameter binding, policy checks, redaction, business outcomes, modal recovery, failure bundles, same-session handoff, and Tenant B reuse.
+The offline suite covers the live hostile iframe surface, locator ladders, schema validation,
+parameter binding, policy checks, redaction, business outcomes, modal recovery, failure bundles,
+same-session handoff, Tenant B reuse, the API safety gates, the chatbot router/formatter, the
+dashboard, and an artifact secret scan. The opt-in live suite holds the MERIDIAN hidden-token
+acceptance tests.
 
 ## Repository guide
 
 - `src/agent/`: LLM clients, tool contract, prompting, and bounded discovery loop
-- `src/artifact/`: strict schema, distillation, storage, approval, and tenant overlays
+- `src/artifact/`: strict schema, distillation, storage, approval, catalog, and tenant overlays
 - `src/replay/`: model-free executor, detectors, recovery, extraction, and result union
 - `src/control/`: control lease, intervention queue, operator console, and human recorder
 - `src/surface/`: browser-independent interface plus frame-aware Playwright implementation
 - `src/policy/`: configurable allowlist, risk checks, and redaction
+- `src/profile/`: strict AppProfiles (the target-specific adapter) and sign-on bootstrap
+- `src/run/`: the one shared capability runner and the in-memory run service/queue
+- `src/api/`: the loopback API (runs, evidence, chat, interventions) and its request schemas
+- `src/chat/`: the chatbot — model router, deterministic formatter, and orchestration
+- `src/dashboard/`: the operator dashboard page
 - `src/eval/`: injected UI mutations and the scoring behind `stress`
 - `apps/corepoint/`: fictional hostile target and deterministic chaos injection
-- `artifacts/`: reviewed capability contracts and Tenant B overlay
+- `profiles/`: `meridian.yaml` (live target) and `corepoint.yaml` (pinned to engine defaults)
+- `artifacts/`: reviewed capability contracts (CorePoint and MERIDIAN) and Tenant B overlay
 - `evidence/`: committed discovery, replay, recovery, failure, handoff, and tenant examples
+- `ADAPTATION.md`: the MERIDIAN adaptation write-up, demo path, and demo-data ledger
 - `REPORT.md`: design decisions, trade-offs, limitations, and cuts
 - `CHANGELOG.md`: what changed since submission, and why
 
