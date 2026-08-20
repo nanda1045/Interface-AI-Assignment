@@ -7,6 +7,26 @@ import { captureLocatorBundle } from "./locators.js";
 import { resolveTarget } from "./resolve.js";
 import type { AbstractAction, ActResult, DigestElement, ElementRef, LocatorBundle, Observation, ResolutionFailure, ResolvedElement, Surface, TargetSpec } from "./types.js";
 
+// Decide a marked table's shape from its raw rows. A genuine header row is one
+// of column LABELS. Two legacy shapes lack a <th>: a data table (MERIDIAN's
+// results grid) whose first row is still labels ("Member No.", "Name"), and a
+// key:value details panel (a transfer confirmation) whose first row is already
+// a VALUE ("Confirmation:", "CN480101"). The tell is the value - a header cell
+// carries no data - so a first row with a digit-bearing cell is not a header,
+// and the caller reads that table as scalar text instead of freezing a
+// run-specific value into a column name.
+export function shapeTable(rows: string[][], thIndex: number): { headers: string[]; rows: string[][]; hasHeaderRow: boolean } {
+  if (rows.length === 0) return { headers: [], rows: [], hasHeaderRow: false };
+  const firstRowIsLabels = (rows[0]?.length ?? 0) >= 2 && rows[0]!.every((cell) => !/\d/.test(cell));
+  const hasHeaderRow = thIndex !== -1 || firstRowIsLabels;
+  const headerIndex = thIndex !== -1 ? thIndex : 0;
+  return {
+    headers: rows[headerIndex] ?? [],
+    rows: rows.filter((_, index) => index !== headerIndex),
+    hasHeaderRow
+  };
+}
+
 // Browser/context are optional so callers can choose resource ownership. The
 // lease callback blocks agent actions while a human controls the same session.
 export interface WebSurfaceOptions {
@@ -156,27 +176,20 @@ export class WebSurface implements Surface {
 
   // Capture every frame's HTML for failure evidence. RunLogger performs the
   // retrospective sensitive-value redaction before the evidence is final.
-  // Headers come from the first row containing th cells (or the first row when
-  // a legacy table has none); every later row's td texts become one entry.
+  // The browser side only extracts raw cell text and the th-row index; the
+  // header/shape decision is a pure function so it can be unit tested.
   public async readTable(ref: ElementRef): Promise<{ headers: string[]; rows: string[][]; hasHeaderRow: boolean }> {
     const locator = await this.locatorForRef(ref);
-    return locator.evaluate((element) => {
+    const raw = await locator.evaluate((element) => {
       const clean = (value: string | null | undefined): string => (value ?? "").replace(/\s+/g, " ").trim();
       const table = element as HTMLTableElement;
       const allRows = [...table.rows];
-      if (allRows.length === 0) return { headers: [], rows: [], hasHeaderRow: false };
-      // A genuine header row has th cells. A legacy grid without one (a
-      // confirmation details panel) has a first row of VALUES, not headers -
-      // hasHeaderRow lets callers refuse to treat those values as columns.
-      const headerRowIndex = allRows.findIndex((row) => row.querySelector("th") !== null);
-      const hasHeaderRow = headerRowIndex !== -1;
-      const headerRow = allRows[hasHeaderRow ? headerRowIndex : 0]!;
-      const headers = [...headerRow.cells].map((cell) => clean(cell.textContent));
-      const bodyRows = allRows
-        .filter((_, index) => index !== (hasHeaderRow ? headerRowIndex : 0))
-        .map((row) => [...row.cells].map((cell) => clean(cell.textContent)));
-      return { headers, rows: bodyRows, hasHeaderRow };
+      return {
+        rows: allRows.map((row) => [...row.cells].map((cell) => clean(cell.textContent))),
+        thIndex: allRows.findIndex((row) => row.querySelector("th") !== null)
+      };
     });
+    return shapeTable(raw.rows, raw.thIndex);
   }
 
   public async snapshotDom(): Promise<string> {

@@ -14,16 +14,16 @@
     "status": "approved",
     "provenance": {
       "discovered_by": "gpt-5.6-luna",
-      "discovery_run": "disc_20260820T221828Z",
-      "recorded_at": "2026-08-20T22:18:38.985Z",
+      "discovery_run": "disc_20260820T224258420Z_001",
+      "recorded_at": "2026-08-20T22:43:08.931Z",
       "approved_by": "reviewer@interface.test",
-      "approved_at": "2026-08-20T22:18:52.620Z",
+      "approved_at": "2026-08-20T22:47:53.047Z",
       "input_fingerprint": {
         "member_number": "389ea52cbf951ddf"
       },
       "validation": {
-        "run": "approval_20260820T221849Z",
-        "validated_at": "2026-08-20T22:18:52.620Z",
+        "run": "approval_20260820T224749902Z_001",
+        "validated_at": "2026-08-20T22:47:53.047Z",
         "outcome": "success",
         "reused_params": [],
         "matched_tiers": {
@@ -51,7 +51,24 @@
     ],
     "properties": {
       "matches": {
-        "type": "string"
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "member_no": {
+              "type": "string",
+              "sensitive": true
+            },
+            "name": {
+              "type": "string",
+              "sensitive": true
+            },
+            "shares": {
+              "type": "string",
+              "sensitive": true
+            }
+          }
+        }
       }
     }
   },
@@ -67,7 +84,7 @@
   "steps": [
     {
       "id": "s1",
-      "intent": "Select \"number\" in \"Search by:\"",
+      "intent": "«redacted» \"number\" in \"Search by:\"",
       "action": {
         "kind": "select",
         "value": "number"
@@ -256,7 +273,21 @@
           }
         ]
       },
-      "parse": "text"
+      "parse": "table",
+      "columns": [
+        {
+          "header": "Member No.",
+          "property": "member_no"
+        },
+        {
+          "header": "Name",
+          "property": "name"
+        },
+        {
+          "header": "Shares",
+          "property": "shares"
+        }
+      ]
     }
   ],
   "outcomes": [

@@ -14,20 +14,20 @@
     "status": "approved",
     "provenance": {
       "discovered_by": "gpt-5.6-luna",
-      "discovery_run": "disc_20260820T221922Z",
-      "recorded_at": "2026-08-20T22:19:32.360Z",
+      "discovery_run": "disc_20260820T224447466Z_001",
+      "recorded_at": "2026-08-20T22:44:55.337Z",
       "approved_by": "reviewer@interface.test",
-      "approved_at": "2026-08-20T22:19:34.061Z",
+      "approved_at": "2026-08-20T22:47:54.444Z",
       "input_fingerprint": {
         "last_name": "5d7dc772fa49e131"
       },
       "validation": {
-        "run": "approval_20260820T221933Z",
-        "validated_at": "2026-08-20T22:19:34.061Z",
+        "run": "approval_20260820T224753695Z_001",
+        "validated_at": "2026-08-20T22:47:54.444Z",
         "outcome": "success",
         "reused_params": [],
         "matched_tiers": {
-          "1": 5
+          "1": 4
         }
       }
     }
@@ -40,7 +40,7 @@
     "properties": {
       "last_name": {
         "type": "string",
-        "sensitive": false
+        "sensitive": true
       }
     }
   },
@@ -51,7 +51,24 @@
     ],
     "properties": {
       "matches": {
-        "type": "string"
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "member_no": {
+              "type": "string",
+              "sensitive": true
+            },
+            "name": {
+              "type": "string",
+              "sensitive": true
+            },
+            "shares": {
+              "type": "string",
+              "sensitive": true
+            }
+          }
+        }
       }
     }
   },
@@ -67,7 +84,7 @@
   "steps": [
     {
       "id": "s1",
-      "intent": "Select \"name\" in \"Search by:\"",
+      "intent": "«redacted» \"name\" in \"Search by:\"",
       "action": {
         "kind": "select",
         "value": "name"
@@ -125,7 +142,8 @@
         "kind": "type",
         "value_from": {
           "param": "last_name"
-        }
+        },
+        "sensitive": true
       },
       "target": {
         "frame": "main",
@@ -219,51 +237,6 @@
           "pattern": "^https://web-sample\\.interface-hiring\\.com/members\\?by=name&q=[^/?&#]+"
         }
       ]
-    },
-    {
-      "id": "s4",
-      "intent": "Click \"Search\"",
-      "action": {
-        "kind": "click"
-      },
-      "target": {
-        "frame": "main",
-        "strategies": [
-          {
-            "kind": "role_name",
-            "role": "button",
-            "name": "Search",
-            "frame": "main",
-            "unique": true,
-            "confidence": 0.9
-          },
-          {
-            "kind": "structural",
-            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[2]",
-            "frame": "main",
-            "unique": true,
-            "confidence": 0.5
-          },
-          {
-            "kind": "geometry",
-            "bboxPct": [
-              0.45225830078125,
-              0.19166666666666668,
-              0.04537353515625,
-              0.02638888888888889
-            ],
-            "nearText": "Value:",
-            "frame": "main",
-            "unique": true,
-            "confidence": 0.35
-          }
-        ]
-      },
-      "wait": {
-        "readyWhen": "target_resolvable",
-        "timeout_ms": 10000
-      },
-      "postconditions": []
     }
   ],
   "checkpoint": {
@@ -300,7 +273,21 @@
           }
         ]
       },
-      "parse": "text"
+      "parse": "table",
+      "columns": [
+        {
+          "header": "Member No.",
+          "property": "member_no"
+        },
+        {
+          "header": "Name",
+          "property": "name"
+        },
+        {
+          "header": "Shares",
+          "property": "shares"
+        }
+      ]
     }
   ],
   "outcomes": [
@@ -309,8 +296,7 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3",
-        "s4"
+        "s3"
       ],
       "when": [
         {
@@ -327,8 +313,7 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3",
-        "s4"
+        "s3"
       ],
       "when": [
         {
@@ -345,8 +330,7 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3",
-        "s4"
+        "s3"
       ],
       "when": [
         {
@@ -363,8 +347,7 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3",
-        "s4"
+        "s3"
       ],
       "when": [
         {

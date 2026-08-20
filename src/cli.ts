@@ -151,7 +151,10 @@ program.command("discover")
             ...(raw.auth || raw.mockAuth ? { authenticatedVia: raw.auth ? `profile sign-on (${raw.auth})` : "mock-auth training session" } : {})
           } : {}),
           inputs: { type: "object", required: Object.keys(params), properties: Object.fromEntries(Object.keys(params).map((name) => [name, { type: "string", sensitive: /member|account|ssn|password|pin|secret/i.test(name) }])) },
-          outputs: { type: "object", required: Object.keys(result.outputs), properties: Object.fromEntries(Object.keys(result.outputs).map((name) => [name, { type: "string", ...(/member|name|balance|account|ssn/i.test(name) ? { sensitive: true } : {}), ...(name.includes("balance") ? { "x-format": "usd-currency" } : {}) }])) }
+          // Customer-data output names are marked sensitive so they are redacted
+          // in persisted evidence even when extracted as a scalar text blob (a
+          // list the model marked as free text rather than a typed table).
+          outputs: { type: "object", required: Object.keys(result.outputs), properties: Object.fromEntries(Object.keys(result.outputs).map((name) => [name, { type: "string", ...(/member|name|balance|account|ssn|share|match|holder|record/i.test(name) ? { sensitive: true } : {}), ...(name.includes("balance") ? { "x-format": "usd-currency" } : {}) }])) }
         });
 
         // save() is create-only by default. In-place replacement requires the

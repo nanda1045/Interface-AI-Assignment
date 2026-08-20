@@ -14,16 +14,16 @@
     "status": "approved",
     "provenance": {
       "discovered_by": "gpt-5.6-luna",
-      "discovery_run": "disc_20260820T221946Z",
-      "recorded_at": "2026-08-20T22:20:02.100Z",
+      "discovery_run": "disc_20260820T224719873Z_001",
+      "recorded_at": "2026-08-20T22:47:34.455Z",
       "approved_by": "reviewer@interface.test",
-      "approved_at": "2026-08-20T22:20:05.883Z",
+      "approved_at": "2026-08-20T22:47:57.938Z",
       "input_fingerprint": {
         "member_id": "389ea52cbf951ddf"
       },
       "validation": {
-        "run": "approval_20260820T222002Z",
-        "validated_at": "2026-08-20T22:20:05.883Z",
+        "run": "approval_20260820T224755098Z_001",
+        "validated_at": "2026-08-20T22:47:57.938Z",
         "outcome": "success",
         "reused_params": [],
         "matched_tiers": {
@@ -56,7 +56,29 @@
         "sensitive": true
       },
       "shares": {
-        "type": "string"
+        "type": "array",
+        "sensitive": true,
+        "items": {
+          "type": "object",
+          "properties": {
+            "share_id": {
+              "type": "string",
+              "sensitive": true
+            },
+            "type": {
+              "type": "string",
+              "sensitive": true
+            },
+            "balance": {
+              "type": "string",
+              "sensitive": true
+            },
+            "status": {
+              "type": "string",
+              "sensitive": true
+            }
+          }
+        }
       }
     }
   },
@@ -351,7 +373,25 @@
           }
         ]
       },
-      "parse": "text"
+      "parse": "table",
+      "columns": [
+        {
+          "header": "Share ID",
+          "property": "share_id"
+        },
+        {
+          "header": "Type",
+          "property": "type"
+        },
+        {
+          "header": "Balance",
+          "property": "balance"
+        },
+        {
+          "header": "Status",
+          "property": "status"
+        }
+      ]
     }
   ],
   "outcomes": [
