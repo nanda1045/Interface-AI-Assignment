@@ -72,6 +72,25 @@ export class ArtifactStore {
     return destination;
   }
 
+  /** The newest approved version of every capability, and nothing else.
+   *
+   *  A draft is invisible here for the same reason a bare name will not resolve
+   *  to one: anything reading this list is choosing what to run, and that choice
+   *  must be limited to capabilities a human signed off. */
+  public async approved(): Promise<CapabilityArtifact[]> {
+    const found: CapabilityArtifact[] = [];
+    for (const id of await this.capabilityIds()) {
+      for (const candidate of await this.versionsOf(id)) {
+        const artifact = await this.readExact(id, candidate.version);
+        if (artifact.capability.status === "approved") {
+          found.push(artifact);
+          break;
+        }
+      }
+    }
+    return found;
+  }
+
   // Distinct capability names, which is what someone naming one without a
   // version needs to see when they get it wrong.
   public async capabilityIds(): Promise<string[]> {

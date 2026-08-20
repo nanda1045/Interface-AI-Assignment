@@ -10,6 +10,7 @@ import { AnthropicClient } from "./agent/llm/anthropic.js";
 import type { LLMClient } from "./agent/llm/client.js";
 import { OpenAIClient } from "./agent/llm/openai.js";
 import { distillDiscovery } from "./artifact/distill.js";
+import { buildCatalog } from "./artifact/catalog.js";
 import { applyOverlay, loadOverlay } from "./artifact/overlay.js";
 import { ArtifactStore } from "./artifact/store.js";
 import { bumpVersion } from "./artifact/versioning.js";
@@ -280,6 +281,30 @@ program.command("replay")
 
 // STRESS: replay under controlled UI mutations and require exact expected
 // outputs, so a run that resolves the wrong element cannot be called a success.
+program.command("capabilities")
+  .description("List approved capabilities as tool definitions an AI agent can be given.")
+  .option("--artifact-root <path>", "artifact directory", "artifacts")
+  .option("--json", "emit the tool definitions themselves rather than a summary", false)
+  .action(async (raw: { artifactRoot: string; json: boolean }) => {
+    const catalog = buildCatalog(await new ArtifactStore(raw.artifactRoot).approved());
+    if (raw.json) {
+      console.log(JSON.stringify(catalog.map((entry) => entry.tool), null, 2));
+      return;
+    }
+    if (catalog.length === 0) {
+      console.log("No approved capabilities. Discover one, then approve it with a validation replay.");
+      return;
+    }
+    for (const entry of catalog) {
+      const inputs = Object.entries(entry.tool.input_schema.properties)
+        .map(([name, schema]) => `${name}: ${(schema as { type: string }).type}${entry.tool.input_schema.required.includes(name) ? "" : "?"}`)
+        .join(", ");
+      console.log(`${entry.tool.name}  [${entry.reference}, ${entry.risk}]`);
+      console.log(`  ${entry.tool.description}`);
+      console.log(`  takes (${inputs})\n`);
+    }
+  });
+
 program.command("stress")
   .description("Replay a capability under injected UI changes and report what the locator ladder survives.")
   .argument("<reference>", "capability@version")
