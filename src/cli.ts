@@ -331,8 +331,9 @@ program.command("serve")
   .option("--artifact-root <path>", "artifact directory", "artifacts")
   .option("--run-root <path>", "run evidence directory", "runs")
   .option("--policy <path>", "policy YAML", "policies/default.yaml")
+  .option("--auth <credentials>", "default credential set for runs that need a session (e.g. teller, supervisor)")
   .option("--demo", "enable demo affordances such as fault injection", false)
-  .action(async (raw: { port: string; artifactRoot: string; runRoot: string; policy: string; demo: boolean }) => {
+  .action(async (raw: { port: string; artifactRoot: string; runRoot: string; policy: string; auth?: string; demo: boolean }) => {
     const store = new ArtifactStore(raw.artifactRoot);
     const runs = new RunService(raw.runRoot);
     const interventions = new Map<string, RunController>();
@@ -340,7 +341,8 @@ program.command("serve")
       store, runs, runRoot: raw.runRoot, demoMode: raw.demo, interventions,
       // The API runs headless replays through the shared runner; attended runs
       // register their controller in the shared registry the dashboard serves.
-      execute: (options) => runCapability({ ...options, policy: raw.policy, onController: (controller) => interventions.set(options.runId, controller), startConsole: false }),
+      // A per-request auth wins; otherwise the server's default signs the run on.
+      execute: (options) => runCapability({ ...options, policy: raw.policy, ...(options.auth ?? raw.auth ? { auth: options.auth ?? raw.auth } : {}), onController: (controller) => interventions.set(options.runId, controller), startConsole: false }),
       ...(process.env.ANTHROPIC_API_KEY ? { chatApiKey: process.env.ANTHROPIC_API_KEY } : {})
     }, Number(raw.port));
     console.error(`Dashboard and API on http://127.0.0.1:${raw.port}${raw.demo ? " (demo mode)" : ""}`);
