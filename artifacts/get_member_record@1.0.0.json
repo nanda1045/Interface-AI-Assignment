@@ -13,21 +13,21 @@
     "risk": "read_only",
     "status": "approved",
     "provenance": {
-      "discovered_by": "claude-sonnet-4-6",
-      "discovery_run": "disc_get_member_record",
-      "recorded_at": "2026-08-20T18:23:45.558Z",
+      "discovered_by": "gpt-5.6-luna",
+      "discovery_run": "disc_20260820T221946Z",
+      "recorded_at": "2026-08-20T22:20:02.100Z",
       "approved_by": "reviewer@interface.test",
-      "approved_at": "2026-08-20T18:23:59.224Z",
+      "approved_at": "2026-08-20T22:20:05.883Z",
       "input_fingerprint": {
-        "member_id": "4bfcc4d35d88fbc1"
+        "member_id": "389ea52cbf951ddf"
       },
       "validation": {
-        "run": "approval_20260820T182357Z",
-        "validated_at": "2026-08-20T18:23:59.224Z",
+        "run": "approval_20260820T222002Z",
+        "validated_at": "2026-08-20T22:20:05.883Z",
         "outcome": "success",
         "reused_params": [],
         "matched_tiers": {
-          "1": 5
+          "1": 6
         }
       }
     }
@@ -56,26 +56,7 @@
         "sensitive": true
       },
       "shares": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "share_id": {
-              "type": "string",
-              "sensitive": true
-            },
-            "type": {
-              "type": "string"
-            },
-            "balance": {
-              "type": "string",
-              "sensitive": true
-            },
-            "status": {
-              "type": "string"
-            }
-          }
-        }
+        "type": "string"
       }
     }
   },
@@ -91,12 +72,66 @@
   "steps": [
     {
       "id": "s1",
-      "intent": "Enter the member number {{member_id}} in the search value field.",
+      "intent": "Select \"number\" in \"Search by:\"",
+      "action": {
+        "kind": "select",
+        "value": "number"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "label_proximity",
+            "label": "Search by:",
+            "control": "select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.85
+          },
+          {
+            "kind": "attr_css",
+            "value": "select[name=\"by\"]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.7
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[1]/td[2]/select",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.2822509765625,
+              0.15694444444444444,
+              0.09296875,
+              0.02638888888888889
+            ],
+            "nearText": "Search by:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": []
+    },
+    {
+      "id": "s2",
+      "intent": "Type {{member_id}} into the target control",
       "action": {
         "kind": "type",
         "value_from": {
           "param": "member_id"
-        }
+        },
+        "sensitive": true
       },
       "target": {
         "frame": "main",
@@ -142,14 +177,22 @@
       ]
     },
     {
-      "id": "s2",
-      "intent": "The member number {{member_id}} is already in the Value field. I'll click Search to look up the member.",
+      "id": "s3",
+      "intent": "Click \"Search\"",
       "action": {
         "kind": "click"
       },
       "target": {
         "frame": "main",
         "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Search",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
           {
             "kind": "structural",
             "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[2]",
@@ -184,8 +227,8 @@
       ]
     },
     {
-      "id": "s3",
-      "intent": "Click the \"Select\" link to open the member record for member {{member_id}} («redacted»).",
+      "id": "s4",
+      "intent": "Click \"Select\"",
       "action": {
         "kind": "click"
       },
@@ -308,25 +351,7 @@
           }
         ]
       },
-      "parse": "table",
-      "columns": [
-        {
-          "header": "Share ID",
-          "property": "share_id"
-        },
-        {
-          "header": "Type",
-          "property": "type"
-        },
-        {
-          "header": "Balance",
-          "property": "balance"
-        },
-        {
-          "header": "Status",
-          "property": "status"
-        }
-      ]
+      "parse": "text"
     }
   ],
   "outcomes": [
@@ -335,7 +360,8 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3"
+        "s3",
+        "s4"
       ],
       "when": [
         {
@@ -352,12 +378,13 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3"
+        "s3",
+        "s4"
       ],
       "when": [
         {
           "kind": "text_visible",
-          "pattern": "RECORD NOT FOUND|could not be located on this host"
+          "pattern": "RECORD NOT FOUND|could not be located on this host|No member records matched"
         }
       ],
       "returns": {
@@ -369,7 +396,8 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3"
+        "s3",
+        "s4"
       ],
       "when": [
         {
@@ -386,7 +414,8 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3"
+        "s3",
+        "s4"
       ],
       "when": [
         {
@@ -428,6 +457,7 @@
     ],
     "allowed_actions": [
       "navigate",
+      "select",
       "type",
       "click"
     ],

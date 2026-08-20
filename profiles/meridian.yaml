@@ -73,8 +73,11 @@ outcome_templates:
       posted: false
   - code: MEMBER_NOT_FOUND
     when:
+      # A direct record open shows "RECORD NOT FOUND"; a member SEARCH with no
+      # hit shows "No member records matched your search". Both mean the member
+      # is not there - a business outcome, not an automation failure.
       - kind: text_visible
-        pattern: "RECORD NOT FOUND|could not be located on this host"
+        pattern: "RECORD NOT FOUND|could not be located on this host|No member records matched"
     returns:
       found: false
   - code: VALIDATION_REJECTED

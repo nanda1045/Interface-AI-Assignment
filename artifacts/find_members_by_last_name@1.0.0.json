@@ -13,21 +13,21 @@
     "risk": "read_only",
     "status": "approved",
     "provenance": {
-      "discovered_by": "claude-sonnet-4-6",
-      "discovery_run": "disc_20260820T185804Z",
-      "recorded_at": "2026-08-20T18:58:17.065Z",
+      "discovered_by": "gpt-5.6-luna",
+      "discovery_run": "disc_20260820T221922Z",
+      "recorded_at": "2026-08-20T22:19:32.360Z",
       "approved_by": "reviewer@interface.test",
-      "approved_at": "2026-08-20T18:58:27.017Z",
+      "approved_at": "2026-08-20T22:19:34.061Z",
       "input_fingerprint": {
         "last_name": "5d7dc772fa49e131"
       },
       "validation": {
-        "run": "approval_20260820T185826Z",
-        "validated_at": "2026-08-20T18:58:27.017Z",
+        "run": "approval_20260820T221933Z",
+        "validated_at": "2026-08-20T22:19:34.061Z",
         "outcome": "success",
         "reused_params": [],
         "matched_tiers": {
-          "1": 4
+          "1": 5
         }
       }
     }
@@ -51,24 +51,7 @@
     ],
     "properties": {
       "matches": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "member_no": {
-              "type": "string",
-              "sensitive": true
-            },
-            "name": {
-              "type": "string",
-              "sensitive": true
-            },
-            "shares": {
-              "type": "string",
-              "sensitive": true
-            }
-          }
-        }
+        "type": "string"
       }
     }
   },
@@ -84,7 +67,7 @@
   "steps": [
     {
       "id": "s1",
-      "intent": "«redacted» \"Last Name\" option in the Search by dropdown.",
+      "intent": "Select \"name\" in \"Search by:\"",
       "action": {
         "kind": "select",
         "value": "name"
@@ -137,7 +120,7 @@
     },
     {
       "id": "s2",
-      "intent": "Type the last name {{last_name}} into the search value field.",
+      "intent": "Type {{last_name}} into the target control",
       "action": {
         "kind": "type",
         "value_from": {
@@ -189,13 +172,21 @@
     },
     {
       "id": "s3",
-      "intent": "The Search by dropdown is already set to \"Last Name\" (value \"name\") and the Value field already contains \"{{last_name}}\". I need to click the Search button to get the results.",
+      "intent": "Click \"Search\"",
       "action": {
         "kind": "click"
       },
       "target": {
         "frame": "main",
         "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Search",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
           {
             "kind": "structural",
             "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[2]",
@@ -228,6 +219,51 @@
           "pattern": "^https://web-sample\\.interface-hiring\\.com/members\\?by=name&q=[^/?&#]+"
         }
       ]
+    },
+    {
+      "id": "s4",
+      "intent": "Click \"Search\"",
+      "action": {
+        "kind": "click"
+      },
+      "target": {
+        "frame": "main",
+        "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Search",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
+          {
+            "kind": "structural",
+            "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[2]",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.45225830078125,
+              0.19166666666666668,
+              0.04537353515625,
+              0.02638888888888889
+            ],
+            "nearText": "Value:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
+          }
+        ]
+      },
+      "wait": {
+        "readyWhen": "target_resolvable",
+        "timeout_ms": 10000
+      },
+      "postconditions": []
     }
   ],
   "checkpoint": {
@@ -264,21 +300,7 @@
           }
         ]
       },
-      "parse": "table",
-      "columns": [
-        {
-          "header": "Member No.",
-          "property": "member_no"
-        },
-        {
-          "header": "Name",
-          "property": "name"
-        },
-        {
-          "header": "Shares",
-          "property": "shares"
-        }
-      ]
+      "parse": "text"
     }
   ],
   "outcomes": [
@@ -287,7 +309,8 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3"
+        "s3",
+        "s4"
       ],
       "when": [
         {
@@ -304,12 +327,13 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3"
+        "s3",
+        "s4"
       ],
       "when": [
         {
           "kind": "text_visible",
-          "pattern": "RECORD NOT FOUND|could not be located on this host"
+          "pattern": "RECORD NOT FOUND|could not be located on this host|No member records matched"
         }
       ],
       "returns": {
@@ -321,7 +345,8 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3"
+        "s3",
+        "s4"
       ],
       "when": [
         {
@@ -338,7 +363,8 @@
       "at_steps": [
         "s1",
         "s2",
-        "s3"
+        "s3",
+        "s4"
       ],
       "when": [
         {

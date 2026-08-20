@@ -13,17 +13,17 @@
     "risk": "read_only",
     "status": "approved",
     "provenance": {
-      "discovered_by": "claude-sonnet-4-6",
-      "discovery_run": "disc_20260820T185717Z",
-      "recorded_at": "2026-08-20T18:57:31.572Z",
+      "discovered_by": "gpt-5.6-luna",
+      "discovery_run": "disc_20260820T221828Z",
+      "recorded_at": "2026-08-20T22:18:38.985Z",
       "approved_by": "reviewer@interface.test",
-      "approved_at": "2026-08-20T18:57:48.712Z",
+      "approved_at": "2026-08-20T22:18:52.620Z",
       "input_fingerprint": {
         "member_number": "389ea52cbf951ddf"
       },
       "validation": {
-        "run": "approval_20260820T185745Z",
-        "validated_at": "2026-08-20T18:57:48.712Z",
+        "run": "approval_20260820T221849Z",
+        "validated_at": "2026-08-20T22:18:52.620Z",
         "outcome": "success",
         "reused_params": [],
         "matched_tiers": {
@@ -51,24 +51,7 @@
     ],
     "properties": {
       "matches": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "member_no": {
-              "type": "string",
-              "sensitive": true
-            },
-            "name": {
-              "type": "string",
-              "sensitive": true
-            },
-            "shares": {
-              "type": "string",
-              "sensitive": true
-            }
-          }
-        }
+        "type": "string"
       }
     }
   },
@@ -84,7 +67,7 @@
   "steps": [
     {
       "id": "s1",
-      "intent": "Step 2: The history shows we already selected 'name', so now we need to select 'number' (Member Number) as instructed.",
+      "intent": "Select \"number\" in \"Search by:\"",
       "action": {
         "kind": "select",
         "value": "number"
@@ -137,12 +120,13 @@
     },
     {
       "id": "s2",
-      "intent": "Type the member number {{member_number}} into the search value field.",
+      "intent": "Type {{member_number}} into the target control",
       "action": {
         "kind": "type",
         "value_from": {
           "param": "member_number"
-        }
+        },
+        "sensitive": true
       },
       "target": {
         "frame": "main",
@@ -189,13 +173,21 @@
     },
     {
       "id": "s3",
-      "intent": "Step 4: Click the Search button to execute the search for member number {{member_number}}.",
+      "intent": "Click \"Search\"",
       "action": {
         "kind": "click"
       },
       "target": {
         "frame": "main",
         "strategies": [
+          {
+            "kind": "role_name",
+            "role": "button",
+            "name": "Search",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.9
+          },
           {
             "kind": "structural",
             "value": "/html/body/table/tbody/tr[3]/td/form/table/tbody/tr[2]/td[2]/input[2]",
@@ -264,21 +256,7 @@
           }
         ]
       },
-      "parse": "table",
-      "columns": [
-        {
-          "header": "Member No.",
-          "property": "member_no"
-        },
-        {
-          "header": "Name",
-          "property": "name"
-        },
-        {
-          "header": "Shares",
-          "property": "shares"
-        }
-      ]
+      "parse": "text"
     }
   ],
   "outcomes": [
@@ -309,7 +287,7 @@
       "when": [
         {
           "kind": "text_visible",
-          "pattern": "RECORD NOT FOUND|could not be located on this host"
+          "pattern": "RECORD NOT FOUND|could not be located on this host|No member records matched"
         }
       ],
       "returns": {
