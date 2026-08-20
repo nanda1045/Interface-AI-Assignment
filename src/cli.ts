@@ -270,11 +270,11 @@ program.command("ask")
   .option("--allow-mutations", "permit answering with a capability that changes records", false)
   .option("--run-root <path>", "run evidence directory", "runs")
   .action(async (question: string, raw: { policy: string; artifactRoot: string; mockAuth: boolean; auth?: string; headless: boolean; allowMutations: boolean; runRoot: string }) => {
-    if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is required to answer a question.");
+    if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required to answer a question.");
     const catalog = buildCatalog(await new ArtifactStore(raw.artifactRoot).approved());
     if (catalog.length === 0) throw new Error("No approved capabilities to answer with. Approve one first.");
     const result = await chat({
-      message: question, catalog, apiKey: process.env.ANTHROPIC_API_KEY,
+      message: question, catalog, apiKey: process.env.OPENAI_API_KEY,
       // The CLI is one-shot, so --allow-mutations is the user's confirmation for
       // a data-changing capability. Irreversible capabilities still refuse here.
       confirm: raw.allowMutations,
@@ -343,7 +343,7 @@ program.command("serve")
       // register their controller in the shared registry the dashboard serves.
       // A per-request auth wins; otherwise the server's default signs the run on.
       execute: (options) => runCapability({ ...options, policy: raw.policy, ...(options.auth ?? raw.auth ? { auth: options.auth ?? raw.auth } : {}), onController: (controller) => interventions.set(options.runId, controller), startConsole: false }),
-      ...(process.env.ANTHROPIC_API_KEY ? { chatApiKey: process.env.ANTHROPIC_API_KEY } : {})
+      ...(process.env.OPENAI_API_KEY ? { chatApiKey: process.env.OPENAI_API_KEY } : {})
     }, Number(raw.port));
     console.error(`Dashboard and API on http://127.0.0.1:${raw.port}${raw.demo ? " (demo mode)" : ""}`);
     await new Promise<void>((resolve) => server.on("close", resolve));
