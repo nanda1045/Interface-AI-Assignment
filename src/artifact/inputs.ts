@@ -17,14 +17,22 @@ export function normalizeInputs(contract: ObjectContract, values: Record<string,
     }
     switch (declared.type) {
       case "string":
-        normalized[name] = typeof value === "number" || typeof value === "boolean" ? String(value) : value;
+        // NaN and Infinity are left alone rather than becoming the strings
+        // "NaN"/"Infinity"; validation reports them as the wrong type instead.
+        normalized[name] = (typeof value === "number" && Number.isFinite(value)) || typeof value === "boolean" ? String(value) : value;
         break;
       case "number":
         normalized[name] = typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value)) ? Number(value) : value;
         break;
-      case "integer":
-        normalized[name] = typeof value === "string" && /^-?\d+$/.test(value.trim()) ? Number(value.trim()) : value;
+      case "integer": {
+        // Digits alone are not enough: 9007199254740993 parses to a DIFFERENT
+        // integer. Anything outside the safe range stays a string and is
+        // rejected by validation rather than silently rounded.
+        const text = typeof value === "string" ? value.trim() : "";
+        const parsed = Number(text);
+        normalized[name] = /^-?\d+$/.test(text) && Number.isSafeInteger(parsed) ? parsed : value;
         break;
+      }
       case "boolean":
         normalized[name] = value === "true" ? true : value === "false" ? false : value;
         break;

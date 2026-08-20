@@ -39,8 +39,8 @@ function validateInputs(artifact: CapabilityArtifact, params: Record<string, unk
     const value = params[name];
     if (value === undefined) continue;
     if (schema.type === "string" && typeof value !== "string") return `${name} must be a string.`;
-    if (schema.type === "number" && typeof value !== "number") return `${name} must be a number.`;
-    if (schema.type === "integer" && (!Number.isInteger(value))) return `${name} must be an integer.`;
+    if (schema.type === "number" && (typeof value !== "number" || !Number.isFinite(value))) return `${name} must be a finite number.`;
+    if (schema.type === "integer" && !Number.isSafeInteger(value)) return `${name} must be a safe integer.`;
     if (schema.type === "boolean" && typeof value !== "boolean") return `${name} must be a boolean.`;
     if (schema.pattern && (typeof value !== "string" || !new RegExp(schema.pattern).test(value))) return `${name} does not match its declared pattern.`;
   }
