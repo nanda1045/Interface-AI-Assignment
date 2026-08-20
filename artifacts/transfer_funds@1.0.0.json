@@ -11,20 +11,30 @@
       "ui_version_range": ">=4.2 <5"
     },
     "risk": "irreversible",
-    "status": "draft",
+    "status": "approved",
     "provenance": {
       "discovered_by": "gpt-5.6-luna",
-      "discovery_run": "disc_20260820T202218Z",
-      "recorded_at": "2026-08-20T20:23:25.284Z",
-      "approved_by": null,
-      "approved_at": null,
+      "discovery_run": "disc_20260820T203632Z",
+      "recorded_at": "2026-08-20T20:37:09.098Z",
+      "approved_by": "reviewer@interface.test",
+      "approved_at": "2026-08-20T20:38:16.813Z",
       "input_fingerprint": {
         "member_number": "54f59b32f6e7a7d8",
         "from_share": "fa13402c8b525fa9",
         "to_share": "0d6fd0577c66e445",
         "amount": "cf9dcf6da8a82be1"
       },
-      "validation": null
+      "validation": {
+        "run": "approval_20260820T203802Z",
+        "validated_at": "2026-08-20T20:38:16.813Z",
+        "outcome": "success",
+        "reused_params": [
+          "amount"
+        ],
+        "matched_tiers": {
+          "1": 9
+        }
+      }
     }
   },
   "inputs": {
@@ -61,21 +71,8 @@
     ],
     "properties": {
       "member_transfer_confirmation": {
-        "type": "array",
-        "sensitive": true,
-        "items": {
-          "type": "object",
-          "properties": {
-            "confirmation": {
-              "type": "string",
-              "sensitive": true
-            },
-            "cn480101": {
-              "type": "string",
-              "sensitive": true
-            }
-          }
-        }
+        "type": "string",
+        "sensitive": true
       }
     }
   },
@@ -276,7 +273,7 @@
             "bboxPct": [
               0.29949951171875,
               0.17708333333333334,
-              0.23984375,
+              0.2453125,
               0.027083333333333334
             ],
             "nearText": "From Share:",
@@ -336,7 +333,7 @@
             "bboxPct": [
               0.29949951171875,
               0.2125,
-              0.23984375,
+              0.2453125,
               0.027083333333333334
             ],
             "nearText": "To Share:",
@@ -359,7 +356,7 @@
     },
     {
       "id": "s6",
-      "intent": "Type {{amount}} into the target control",
+      "intent": "Type {{amount}} into \"Amount:\"",
       "action": {
         "kind": "type",
         "value_from": {
@@ -369,6 +366,14 @@
       "target": {
         "frame": "main",
         "strategies": [
+          {
+            "kind": "label_proximity",
+            "label": "Amount:",
+            "control": "input",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.85
+          },
           {
             "kind": "attr_css",
             "value": "input[name=\"amount\"]",
@@ -382,6 +387,19 @@
             "frame": "main",
             "unique": true,
             "confidence": 0.5
+          },
+          {
+            "kind": "geometry",
+            "bboxPct": [
+              0.30496826171875,
+              0.24791666666666667,
+              0.0796875,
+              0.024305555555555556
+            ],
+            "nearText": "Amount:",
+            "frame": "main",
+            "unique": true,
+            "confidence": 0.35
           }
         ]
       },
@@ -525,17 +543,7 @@
           }
         ]
       },
-      "parse": "table",
-      "columns": [
-        {
-          "header": "Confirmation:",
-          "property": "confirmation"
-        },
-        {
-          "header": "CN480101",
-          "property": "cn480101"
-        }
-      ]
+      "parse": "text"
     }
   ],
   "outcomes": [
