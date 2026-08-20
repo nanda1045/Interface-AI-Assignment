@@ -86,7 +86,9 @@ describe("replay hard failures", () => {
     roots.push(root);
     const logger = new RunLogger("replay_error", root);
     const result = await replay({ artifact, params: { member_id: "4521" }, surface: new ErrorSurface(), policy: new PolicyEngine(config), logger });
-    expect(result).toMatchObject({ status: "failure", failure: { class: "app_error", step: "s1", domSnapshot: "failure/dom.html" } });
+    // The artifact under test is `mutating`, so the caller is told to establish
+    // whether the work landed rather than to repeat it.
+    expect(result).toMatchObject({ status: "failure", failure: { class: "app_error", disposition: "verify_then_retry", step: "s1", domSnapshot: "failure/dom.html" } });
     const dom = await readFile(path.join(logger.directory, "failure/dom.html"), "utf8");
     expect(dom).not.toContain("4521");
     expect(dom).toContain("«redacted»");

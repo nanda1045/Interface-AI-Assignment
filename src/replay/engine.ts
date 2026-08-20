@@ -8,7 +8,7 @@ import type { RunLogger } from "../evidence/run-logger.js";
 import { inferRisk, type PolicyEngine } from "../policy/engine.js";
 import type { AbstractAction, Observation, ResolutionFailure, ResolvedElement, Surface, TargetSpec } from "../surface/types.js";
 import { allPredicatesMatch, detectEscalation, detectGlobalFailure, predicateMatches } from "./detectors.js";
-import type { FailureClass, ReplayResult, TierStats } from "./result.js";
+import { dispositionFor, type FailureClass, type ReplayResult, type TierStats } from "./result.js";
 
 // All runtime dependencies are explicit and browser-independent through Surface.
 export interface ReplayOptions {
@@ -390,7 +390,16 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     let dom = "DOM snapshot unavailable: the browser session was no longer reachable.";
     try { dom = await surface.snapshotDom(); } catch { /* Browser may already be unreachable; keep the fallback text. */ }
     const bundle = await logger.failureBundle({ screenshot: observation?.screenshot, dom, ...(lastAttempts ? { attempts: lastAttempts } : {}) });
-    const result: ReplayResult = { status: "failure", failure: { class: failureClass, step: currentStep, intent: currentIntent, expected, observed, ...bundle }, evidence: logger.directory, ...interventionPart() };
+    const result: ReplayResult = {
+      status: "failure",
+      failure: {
+        class: failureClass,
+        disposition: dispositionFor(failureClass, artifact.capability.risk),
+        step: currentStep, intent: currentIntent, expected, observed, ...bundle
+      },
+      evidence: logger.directory,
+      ...interventionPart()
+    };
     await logger.event({ type: "result", status: "failure", detail: result });
     await logger.result(result);
     await logger.finalizeRedaction();

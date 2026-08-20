@@ -30,7 +30,7 @@ describe("stress scoring", () => {
     expect(outcome).toMatchObject({ survived: false, verdict: "business_outcome" });
     const failure = scoreStress(mutation, {
       status: "failure", evidence: "runs/x",
-      failure: { class: "target_not_found", step: "s2", intent: "", expected: "", observed: "", domSnapshot: "failure/dom.html" }
+      failure: { class: "target_not_found", disposition: "fix_capability", step: "s2", intent: "", expected: "", observed: "", domSnapshot: "failure/dom.html" }
     }, expected);
     expect(failure).toMatchObject({ survived: false, detail: "target_not_found" });
   });
