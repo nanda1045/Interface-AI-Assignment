@@ -129,6 +129,20 @@ function columnsFor(headers: string[]): { header: string; property: string }[] {
   });
 }
 
+// A synthesized url_matches postcondition must generalise across invocations:
+// baking the discovery member's number into it both leaks that value and makes
+// the postcondition fail for every other member. Each tainted value in the URL
+// becomes a bounded wildcard, so the assertion still proves the flow reached the
+// right kind of page without pinning it to one run's data.
+function urlPattern(afterUrl: string, tainted: readonly string[]): string {
+  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let pattern = escapeRegex(afterUrl);
+  for (const value of [...tainted].filter((candidate) => candidate.length >= minimumTaintedLength).sort((left, right) => right.length - left.length)) {
+    pattern = pattern.split(escapeRegex(value)).join("[^/?&#]+");
+  }
+  return `^${pattern}`;
+}
+
 function distillStep(
   recorded: RecordedStep,
   index: number,
@@ -150,7 +164,7 @@ function distillStep(
   const intent = redactString(parameterized, tainted);
   const postconditions: CapabilityArtifact["steps"][number]["postconditions"] = [];
   if (action.kind === "type" || action.kind === "select") postconditions.push({ kind: "value_equals_param", param: action.value_from.param });
-  if (recorded.afterUrl !== recorded.beforeUrl) postconditions.push({ kind: "url_matches", pattern: `^${recorded.afterUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` });
+  if (recorded.afterUrl !== recorded.beforeUrl) postconditions.push({ kind: "url_matches", pattern: urlPattern(recorded.afterUrl, tainted) });
   return {
     id: `s${index + 1}`,
     intent,

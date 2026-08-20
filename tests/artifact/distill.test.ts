@@ -158,6 +158,25 @@ describe("distillDiscovery", () => {
     expect(readOnly.recovery.map((rule) => rule.id)).toEqual(["dismiss", "reenter"]);
   });
 
+  it("generalises parameter values in a synthesized url postcondition", () => {
+    // A navigation whose URL carries the member number must not pin the
+    // postcondition to that member, or replay for anyone else would fail it -
+    // and the raw value must not survive into the artifact.
+    const navigated: DiscoveryResult = {
+      ...result,
+      steps: [
+        { step: 1, reasoning: "Enter the member", action: { kind: "type", ref: "e1", text: "4521", sensitive: true }, locators: locator, beforeUrl: "https://app.test/members", afterUrl: "https://app.test/members" },
+        { step: 2, reasoning: "Open the record", action: { kind: "click", ref: "e2" }, locators: locator, beforeUrl: "https://app.test/members?q=4521", afterUrl: "https://app.test/members/4521" }
+      ]
+    };
+    const artifact = distillDiscovery(navigated, options);
+    const url = artifact.steps[1]?.postconditions.find((p) => p.kind === "url_matches");
+    expect(url?.kind === "url_matches" && url.pattern).toBe("^https://app\\.test/members/[^/?&#]+");
+    expect(JSON.stringify(artifact)).not.toContain("4521");
+    // And it still matches a different member's landing URL.
+    if (url?.kind === "url_matches") expect(new RegExp(url.pattern).test("https://app.test/members/8832")).toBe(true);
+  });
+
   it("demands --risk irreversible when discovery recorded a human boundary", () => {
     const withBoundary: DiscoveryResult = {
       ...result,
