@@ -1,3 +1,6 @@
+// Per-run audit writer. It records structured events, provider transcripts,
+// results/artifacts, screenshots, and failure diagnostics under one directory,
+// while redacting known secrets both immediately and retrospectively.
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { redactString, redactValue } from "../policy/redact.js";
@@ -5,36 +8,43 @@ import type { RunEvent } from "./events.js";
 
 export class RunLogger {
   public readonly directory: string;
+  // Values become known throughout a run, so the set grows over time.
   private readonly sensitiveValues = new Set<string>();
 
   public constructor(public readonly runId: string, root = "runs") {
     this.directory = path.resolve(root, runId);
   }
 
+  // Create predictable folders for step evidence and terminal diagnostics.
   public async initialize(): Promise<void> {
     await mkdir(path.join(this.directory, "steps"), { recursive: true });
     await mkdir(path.join(this.directory, "failure"), { recursive: true });
   }
 
+  // Register exact values for all future writes and the final retrospective pass.
   public markSensitive(value: string): void {
     if (value) this.sensitiveValues.add(value);
   }
 
-  // Distillation scrubs the artifact against the same list, so a capability
-  // cannot retain data this run already decided was unsafe to persist.
+  // Give the distiller the same taint list used by evidence so artifact and logs
+  // cannot disagree about which run values are unsafe to retain.
   public knownSensitiveValues(): string[] {
     return [...this.sensitiveValues];
   }
 
+  // Append one timestamped, run-scoped JSON event after immediate redaction.
   public async event(event: RunEvent): Promise<void> {
     const persisted = redactValue({ ...event, at: new Date().toISOString(), runId: this.runId }, [...this.sensitiveValues]);
     await appendFile(path.join(this.directory, "log.jsonl"), `${JSON.stringify(persisted)}\n`, "utf8");
   }
 
+  // Keep the raw provider request/response shape for audit, but redact its string
+  // values before persistence and again when the run terminates.
   public async transcript(record: unknown): Promise<void> {
     await appendFile(path.join(this.directory, "transcript.jsonl"), `${JSON.stringify(redactValue(record, [...this.sensitiveValues]))}\n`, "utf8");
   }
 
+  // Store requested PNG evidence by step and return its relative bundle path.
   public async screenshot(step: number, dataUrl: string): Promise<string> {
     const relative = `steps/${String(step).padStart(2, "0")}.png`;
     const encoded = dataUrl.replace(/^data:image\/png;base64,/, "");
@@ -42,6 +52,7 @@ export class RunLogger {
     return relative;
   }
 
+  // Terminal result and distilled-artifact copies are human-readable JSON.
   public async result(value: unknown): Promise<void> {
     await writeFile(path.join(this.directory, "result.json"), `${JSON.stringify(redactValue(value, [...this.sensitiveValues]), null, 2)}\n`, "utf8");
   }
@@ -50,6 +61,8 @@ export class RunLogger {
     await writeFile(path.join(this.directory, "artifact.json"), `${JSON.stringify(redactValue(value, [...this.sensitiveValues]), null, 2)}\n`, "utf8");
   }
 
+  // Earlier lines may contain a value learned to be sensitive only later (for
+  // example an output). Re-read and rewrite every structured text file at the end.
   public async finalizeRedaction(): Promise<void> {
     const targets: { filename: string; kind: "jsonl" | "json" }[] = [
       { filename: "log.jsonl", kind: "jsonl" },
@@ -73,8 +86,8 @@ export class RunLogger {
     }
   }
 
-  // Re-serializing through JSON keeps redaction scoped to string values; a raw
-  // text substitution would also corrupt digit substrings inside numbers.
+  // Parse and redact JSON values rather than replacing arbitrary file substrings,
+  // which could corrupt unrelated numeric syntax. Fall back for malformed text.
   private redactSerialized(serialized: string, pretty: boolean): string {
     const sensitiveValues = [...this.sensitiveValues];
     try {
@@ -85,6 +98,8 @@ export class RunLogger {
     }
   }
 
+  // Write a redacted DOM snapshot, optional screenshot, and locator-attempt JSON.
+  // Return only relative paths so the structured ReplayResult stays compact.
   public async failureBundle(options: { screenshot?: string; dom: string; attempts?: unknown }): Promise<{ screenshot?: string; domSnapshot: string; resolutionAttempts?: string }> {
     const output: { screenshot?: string; domSnapshot: string; resolutionAttempts?: string } = { domSnapshot: "failure/dom.html" };
     await writeFile(path.join(this.directory, output.domSnapshot), redactValue(options.dom, [...this.sensitiveValues]), "utf8");
@@ -100,6 +115,7 @@ export class RunLogger {
   }
 }
 
+// Human-readable UTC run ID used as the evidence directory name.
 export function createRunId(prefix: "disc" | "replay", now = new Date()): string {
   return `${prefix}_${now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")}`;
 }

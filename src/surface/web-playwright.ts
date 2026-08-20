@@ -1,9 +1,14 @@
+// Concrete Playwright implementation of the browser-independent Surface. This
+// is the trusted adapter that turns bounded abstract actions into real browser
+// operations and delegates digest, locator capture, and replay resolution.
 import type { Browser, BrowserContext, Frame, Locator, Page } from "playwright";
 import { digestFrame, getFramePath, stateHash } from "./digest.js";
 import { captureLocatorBundle } from "./locators.js";
 import { resolveTarget } from "./resolve.js";
 import type { AbstractAction, ActResult, DigestElement, ElementRef, LocatorBundle, Observation, ResolutionFailure, ResolvedElement, Surface, TargetSpec } from "./types.js";
 
+// Browser/context are optional so callers can choose resource ownership. The
+// lease callback blocks agent actions while a human controls the same session.
 export interface WebSurfaceOptions {
   browser?: Browser;
   context?: BrowserContext;
@@ -11,6 +16,8 @@ export interface WebSurfaceOptions {
 }
 
 export class WebSurface implements Surface {
+  // Observation refs and replay-resolution refs are unique within this surface.
+  // Only elements from the latest observation remain valid for locator capture.
   private observationSequence = 0;
   private refSequence = 0;
   private readonly observedElements = new Map<ElementRef, DigestElement>();
@@ -20,11 +27,14 @@ export class WebSurface implements Surface {
     private readonly options: WebSurfaceOptions = {}
   ) {}
 
+  // Generate trusted internal refs; the model never chooses their format.
   private nextRef(prefix = "e"): string {
     this.refSequence += 1;
     return `${prefix}${this.refSequence}`;
   }
 
+  // Resolve a temporary data-cu-ref across every frame and require exactly one
+  // match. The attribute is an internal bridge, not a persisted locator.
   private async locatorWithFrameForRef(ref: ElementRef): Promise<{ frame: Frame; locator: Locator }> {
     for (const frame of this.page.frames()) {
       const candidate = frame.locator(`[data-cu-ref="${ref}"]`);
@@ -37,6 +47,8 @@ export class WebSurface implements Surface {
     return (await this.locatorWithFrameForRef(ref)).locator;
   }
 
+  // Build one frame-aware semantic observation. Retry briefly when navigation
+  // destroys an execution context while the page is being inspected.
   public async observe(options: { screenshot?: boolean } = {}): Promise<Observation> {
     this.observationSequence += 1;
     const observationId = `o${this.observationSequence}`;
@@ -53,6 +65,9 @@ export class WebSurface implements Surface {
       }
     }
     if (!elements) throw new Error("Could not observe a stable browser state.");
+
+    // Replace the ref map on every observation so old model refs cannot be used
+    // for later locator capture. Screenshots are opt-in evidence only.
     this.observedElements.clear();
     for (const element of elements) this.observedElements.set(element.ref, element);
     const screenshot = options.screenshot ? `data:image/png;base64,${(await this.page.screenshot()).toString("base64")}` : undefined;
@@ -66,6 +81,8 @@ export class WebSurface implements Surface {
     };
   }
 
+  // Enforce the human/agent control lease first, then translate one approved
+  // AbstractAction into its Playwright operation.
   public async act(action: AbstractAction): Promise<ActResult> {
     if (this.options.canAgentAct && !this.options.canAgentAct()) throw new Error("NotLeaseHolder: agent does not hold the control lease");
     switch (action.kind) {
@@ -75,6 +92,8 @@ export class WebSurface implements Surface {
       case "click":
         {
           const { frame, locator } = await this.locatorWithFrameForRef(action.ref);
+          // For links and form controls, begin waiting before the click so a fast
+          // frame navigation cannot be missed. AJAX-style clicks need no wait.
           const navigatesFrame = await locator.evaluate((element) => {
             const tag = element.tagName.toLowerCase();
             return Boolean((tag === "a" && element.hasAttribute("href")) || element.closest("form"));
@@ -108,6 +127,8 @@ export class WebSurface implements Surface {
     return { ok: true, url: this.page.url() };
   }
 
+  // Convert a currently observed ref into a ranked bundle of strategies. Reject
+  // stale refs and require the selected node to remain uniquely attached.
   public async captureLocators(ref: ElementRef): Promise<LocatorBundle> {
     const observation = this.observedElements.get(ref);
     if (!observation) throw new Error(`Unknown or stale element ref: ${ref}`);
@@ -119,10 +140,13 @@ export class WebSurface implements Surface {
     throw new Error(`Element ref ${ref} is not attached to a known frame.`);
   }
 
+  // Replay resolution is separate from capture: it walks the saved ladder and
+  // assigns a fresh internal ref to the element that resolves uniquely.
   public resolve(target: TargetSpec): Promise<ResolvedElement | ResolutionFailure> {
     return resolveTarget(this.page, target, () => this.nextRef("r"));
   }
 
+  // Read normalised visible text and, for form controls, the current input value.
   public async read(ref: ElementRef): Promise<{ text: string; value?: string }> {
     const locator = await this.locatorForRef(ref);
     const text = (await locator.textContent() ?? "").replace(/\s+/g, " ").trim();
@@ -130,11 +154,15 @@ export class WebSurface implements Surface {
     return { text, ...(value !== undefined ? { value } : {}) };
   }
 
+  // Capture every frame's HTML for failure evidence. RunLogger performs the
+  // retrospective sensitive-value redaction before the evidence is final.
   public async snapshotDom(): Promise<string> {
     const snapshots = await Promise.all(this.page.frames().map(async (frame) => `<!-- frame:${getFramePath(frame)} url:${frame.url()} -->\n${await frame.content()}`));
     return snapshots.join("\n");
   }
 
+  // Close only resources supplied as owned options; useful for tests that manage
+  // their page/browser lifecycle separately.
   public async close(): Promise<void> {
     if (this.options.context) await this.options.context.close();
     if (this.options.browser) await this.options.browser.close();

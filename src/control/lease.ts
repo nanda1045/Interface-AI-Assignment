@@ -1,5 +1,10 @@
+// Explicit ownership state machine for one live browser session. At most one
+// actor can hold control: the agent, a named human, or nobody during a safe
+// transition/terminal state.
 import { EventEmitter } from "node:events";
 
+// Discriminated states make legal ownership and required metadata visible in the
+// type system rather than representing control with a loose boolean flag.
 export type ControlState =
   | { phase: "agent_running"; holder: "agent" }
   | { phase: "paused"; holder: null; reason: string }
@@ -10,11 +15,15 @@ export type ControlState =
 
 export class ControlLease {
   private state: ControlState = { phase: "agent_running", holder: "agent" };
+  // State changes wake the waiting controller and can update observers.
   private readonly events = new EventEmitter();
 
   public current(): ControlState { return this.state; }
+  // WebSurface calls this immediately before every agent browser action.
   public agentCanAct(): boolean { return this.state.phase === "agent_running"; }
 
+  // Each public method permits only the valid predecessor phase. Invalid or
+  // concurrent control operations fail instead of silently corrupting ownership.
   public pause(reason: string): void {
     this.transition(["agent_running"], { phase: "paused", holder: null, reason });
   }
@@ -29,6 +38,8 @@ export class ControlLease {
   public complete(): void { this.transition(["agent_running", "resuming"], { phase: "done", holder: null }); }
   public abort(reason: string): void { this.transition(["agent_running", "paused", "human_control", "resuming"], { phase: "aborted", holder: null, reason }); }
 
+  // Await a handback/resume transition without polling, with a bounded timeout so
+  // an unanswered intervention cannot leave the run paused forever.
   public async waitFor(phase: ControlState["phase"], timeoutMs: number): Promise<ControlState> {
     if (this.state.phase === phase) return this.state;
     return new Promise((resolve, reject) => {
@@ -39,11 +50,13 @@ export class ControlLease {
     });
   }
 
+  // Subscribe to control changes and receive an unsubscribe function.
   public onChange(listener: (state: ControlState) => void): () => void {
     this.events.on("change", listener);
     return () => this.events.off("change", listener);
   }
 
+  // Central transition guard and notification point for the entire state machine.
   private transition(allowed: ControlState["phase"][], next: ControlState): void {
     if (!allowed.includes(this.state.phase)) throw new Error(`Invalid control transition: ${this.state.phase} → ${next.phase}`);
     this.state = next;

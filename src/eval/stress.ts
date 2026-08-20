@@ -1,3 +1,5 @@
+// Scores and formats deterministic replay under controlled UI mutations. Exact
+// expected outputs prevent a wrong-element read from being counted as survival.
 import type { ReplayResult } from "../replay/result.js";
 import type { UiMutation } from "./mutations.js";
 
@@ -10,10 +12,7 @@ export interface StressRow {
   predicted: string[];
 }
 
-/** A run that completes with the wrong value has not survived. Scoring on
- *  status alone would call a reordered column a success while it quietly
- *  returned the balance from the wrong account - which is the failure this
- *  system is least able to notice on its own. */
+// Success status is insufficient: every named expected output must match exactly.
 export function scoreStress(mutation: UiMutation, result: ReplayResult, expected: Record<string, string>): StressRow {
   const outputs = result.status === "success" ? result.outputs : {};
   const wrong = Object.entries(expected)
@@ -29,6 +28,8 @@ export function scoreStress(mutation: UiMutation, result: ReplayResult, expected
   };
 }
 
+// Produce a compact operator report with survival, correctness, failure class,
+// matched strategy counts, and an aggregate survivor total.
 export function formatStressReport(rows: StressRow[]): string {
   const resolvedBy = (row: StressRow) =>
     Object.entries(row.strategies).map(([kind, count]) => `${kind}×${count}`).join(" ") || "—";

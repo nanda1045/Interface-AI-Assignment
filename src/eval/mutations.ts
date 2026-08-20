@@ -1,37 +1,22 @@
-/** A UI change injected into the page before a capability replays, used to
- *  measure what the locator ladder actually survives.
- *
- *  These run in the browser rather than in the target application, for two
- *  reasons. The harness then works against any surface instead of only the
- *  fictional app it was written beside, and the application under test stays
- *  exactly the application the capability was recorded against - the mutation
- *  is the only variable.
- *
- *  The governing constraint: a mutation may change how an element is *found*
- *  and must not change what the application *does*. Renaming a form control's
- *  `name` attribute, for instance, breaks the POST the server expects, so every
- *  capability would fail and the result would describe a broken app rather than
- *  a fragile locator. `id` is a scripting hook and is fair game; `name` is part
- *  of the form contract and is left alone.
- */
+// Browser-injected UI drift scenarios. They change how elements are found while
+// preserving application behaviour, keeping locator resilience as the variable
+// under test; form `name` values are therefore left unchanged.
 export interface UiMutation {
   id: string;
   describes: string;
-  /** Expected to break these strategy kinds, written down before measuring. */
+  // Strategy kinds predicted to fail before the scenario is measured.
   predicts: string[];
   script: string;
 }
 
-// Init scripts run before the application's own, so the work is deferred until
-// the document exists. Full page loads mean this fires once per navigation.
+// Init scripts register before application code, then mutate each loaded DOM only
+// after it exists.
 function onReady(body: string): string {
   return `document.addEventListener("DOMContentLoaded", function () { try { ${body} } catch (error) { console.error("mutation failed", error); } });`;
 }
 
-// Composed below as well as used on their own: a mutation only exercises the
-// rungs the ladder actually falls through to, so breaking a positional strategy
-// requires first taking away the semantic ones that would otherwise satisfy the
-// resolve before it ever gets there.
+// Shared building blocks allow compound scenarios to remove semantic rungs first
+// and then exercise the positional fallbacks they normally hide.
 const relabelBody = `
       var index = 0;
       var relabel = function (node) {
@@ -83,11 +68,7 @@ export const uiMutations: UiMutation[] = [
     id: "extend_labels",
     describes: "Wording extended, as a clarifying edit would do — the original text is still a substring",
     predicts: ["role_name", "label_proximity"],
-    // The trailing cell of a row is deliberately left alone. That is where a
-    // value sits, and rewriting it would confound the question being asked -
-    // "can the ladder still find the right element" - with "is the value what
-    // we expected". A label cell is one with another cell after it, which is a
-    // structural rule rather than anything specific to this application.
+    // Rewrite labels, not trailing value cells, so outputs stay semantically valid.
     script: onReady(`
       var rename = function (node) {
         if (node.children.length === 0 && node.textContent && node.textContent.trim()) {
@@ -106,9 +87,7 @@ export const uiMutations: UiMutation[] = [
   {
     id: "rename_labels",
     describes: "Wording replaced outright, as a terminology change would do — nothing of the original survives",
-    // Separate from extend_labels on purpose. Appending leaves the old wording
-    // as a substring, which exact-match strategies lose and substring-match
-    // strategies quietly survive; only a full replacement tests both.
+    // Full replacement breaks both exact and substring matches.
     predicts: ["role_name", "label_proximity", "text", "label_adjacent_cell"],
     script: onReady(relabelBody)
   },

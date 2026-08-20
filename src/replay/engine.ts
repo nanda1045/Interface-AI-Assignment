@@ -1,3 +1,7 @@
+// Deterministic capability executor. It contains no LLM dependency: it validates
+// invocation inputs, walks saved steps/locator ladders, enforces artifact and
+// deployment policy, verifies state, extracts outputs, and records one of three
+// terminal results with evidence.
 import type { CapabilityArtifact } from "../artifact/schema.js";
 import type { HandoffCoordinator } from "../control/intervention.js";
 import type { RunLogger } from "../evidence/run-logger.js";
@@ -6,6 +10,7 @@ import type { AbstractAction, Observation, ResolutionFailure, ResolvedElement, S
 import { allPredicatesMatch, detectEscalation, detectGlobalFailure, predicateMatches } from "./detectors.js";
 import type { FailureClass, ReplayResult, TierStats } from "./result.js";
 
+// All runtime dependencies are explicit and browser-independent through Surface.
 export interface ReplayOptions {
   artifact: CapabilityArtifact;
   params: Record<string, unknown>;
@@ -16,6 +21,8 @@ export interface ReplayOptions {
   handoff?: HandoffCoordinator;
 }
 
+// Validate the concrete invocation against the artifact's declared input contract
+// before opening the capability entry page or performing any business action.
 function validateInputs(artifact: CapabilityArtifact, params: Record<string, unknown>): string | undefined {
   for (const required of artifact.inputs.required) if (!(required in params)) return `Missing required parameter: ${required}`;
   for (const name of Object.keys(params)) if (!(name in artifact.inputs.properties)) return `Unknown parameter: ${name}`;
@@ -31,6 +38,8 @@ function validateInputs(artifact: CapabilityArtifact, params: Record<string, unk
   return undefined;
 }
 
+// Combine a declarative saved action with current invocation parameters and the
+// fresh element ref returned by locator resolution.
 function materializeAction(step: CapabilityArtifact["steps"][number], params: Record<string, unknown>, ref?: string): AbstractAction {
   const action = step.action;
   switch (action.kind) {
@@ -53,8 +62,8 @@ function materializeAction(step: CapabilityArtifact["steps"][number], params: Re
   }
 }
 
-// The artifact's own allowlist is enforced in addition to the operator policy
-// file, so a capability can never act beyond what its reviewers approved.
+// Capability-level least privilege: every action and navigation origin must stay
+// inside the narrower contract reviewers approved for this artifact.
 function artifactPolicyViolation(artifact: CapabilityArtifact, action: AbstractAction): string | undefined {
   if (!artifact.policy.allowed_actions.includes(action.kind)) return `Action ${action.kind} is outside the artifact's allowed_actions.`;
   if (action.kind === "navigate") {
@@ -65,6 +74,8 @@ function artifactPolicyViolation(artifact: CapabilityArtifact, action: AbstractA
   return undefined;
 }
 
+// Record both ladder position and actual strategy kind. Tier is useful within a
+// target; strategy kind is comparable across different steps and runs.
 function recordTier(stats: TierStats, step: string, resolution: ResolvedElement): void {
   stats.resolutions += 1;
   stats.matched_tiers[String(resolution.tier)] = (stats.matched_tiers[String(resolution.tier)] ?? 0) + 1;
@@ -73,6 +84,8 @@ function recordTier(stats: TierStats, step: string, resolution: ResolvedElement)
   if (resolution.tier > 1 && !stats.rescued_steps.includes(step)) stats.rescued_steps.push(step);
 }
 
+// Allow asynchronously rendered targets to appear within the step timeout while
+// tolerating short-lived iframe/navigation context replacement.
 async function resolveWithWait(surface: Surface, target: TargetSpec, timeoutMs: number): Promise<ResolvedElement | ResolutionFailure> {
   const deadline = Date.now() + timeoutMs;
   let last: ResolvedElement | ResolutionFailure = { ok: false, reason: "target_not_found", attempts: [] };
@@ -88,6 +101,8 @@ async function resolveWithWait(surface: Surface, target: TargetSpec, timeoutMs: 
   return last;
 }
 
+// After acting, wait briefly for logical UI state to change before evaluating
+// outcomes and postconditions. Never wait beyond two seconds here.
 async function observeAfterAction(surface: Surface, priorHash: string, timeoutMs: number): Promise<Observation> {
   const deadline = Date.now() + Math.min(timeoutMs, 2_000);
   let observation = await surface.observe();
@@ -98,6 +113,7 @@ async function observeAfterAction(surface: Surface, priorHash: string, timeoutMs
   return observation;
 }
 
+// Execute one capability invocation from entry navigation through terminal result.
 export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   const { artifact, params, surface, policy, logger } = options;
   const stats: TierStats = { resolutions: 0, matched_tiers: {}, matched_strategies: {}, rescued_steps: [] };
@@ -107,6 +123,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   let currentIntent = "Open the capability entry point";
   let lastAttempts: unknown;
   let sensitiveRun = false;
+
+  // Initialise evidence and register sensitive invocation values before logging.
   await logger.initialize();
   for (const [name, schema] of Object.entries(artifact.inputs.properties)) {
     if (schema.sensitive && params[name] !== undefined) {
@@ -115,6 +133,9 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     }
   }
   await logger.event({ type: "run_started", goal: artifact.capability.title, target: artifact.entry.url, model: "deterministic-replay" });
+
+  // Reject invalid input, unapproved mutation, and unattended irreversible work
+  // before the browser performs the capability.
   const invalidInput = validateInputs(artifact, params);
   if (invalidInput) return fail("invalid_input", "Parameters satisfying the artifact input contract.", invalidInput);
   if (artifact.capability.risk === "mutating" && artifact.capability.status !== "approved" && !options.confirmMutations) {
@@ -124,6 +145,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     return fail("policy_blocked", "A human approval intervention.", "Irreversible capabilities cannot run unattended.");
   }
 
+  // Entry navigation must pass both the artifact allowlist and deployment policy.
   const entryAction: AbstractAction = { kind: "navigate", url: artifact.entry.url };
   const entryViolation = artifactPolicyViolation(artifact, entryAction);
   if (entryViolation) return fail("policy_blocked", "An entry URL inside the artifact's own allowlist.", entryViolation);
@@ -133,6 +155,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   const entryResult = await surface.act(entryAction);
   await logger.event({ type: "action", step: 0, action: entryAction, resultUrl: entryResult.url });
 
+  // Follow saved steps in order. The inner loop exists only so a human handoff can
+  // return control and request that the current step be retried from fresh state.
   stepsLoop: for (const [index, step] of artifact.steps.entries()) {
     let retryCurrentStep = true;
     while (retryCurrentStep) {
@@ -141,6 +165,9 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       currentStep = step.id;
       currentIntent = step.intent;
       let observation = await surface.observe();
+
+      // Before acting, detect global application/session failures, apply bounded
+      // recovery, offer handoff for approval walls, and classify business outcomes.
       const preGlobal = detectGlobalFailure(observation);
       if (preGlobal) {
         if (preGlobal.class !== "session_lost" || !options.handoff) return fail(preGlobal.class, "An authenticated, healthy application screen.", preGlobal.observed);
@@ -166,6 +193,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       const preOutcome = await detectOutcome(step.id, observation);
       if (preOutcome) return preOutcome;
 
+      // Resolve the saved target ladder and retain attempt evidence. A missing
+      // target fails closed rather than asking a model to improvise.
       let resolved: ResolvedElement | undefined;
       if (step.target) {
         const resolution = await resolveWithWait(surface, step.target, step.wait.timeout_ms);
@@ -174,6 +203,9 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
         resolved = resolution;
         recordTier(stats, step.id, resolution);
       }
+
+      // Materialize the action, enforce the capability allowlist, infer runtime
+      // risk, and then enforce the wider deployment policy before Surface.act().
       const action = materializeAction(step, params, resolved?.ref);
       const stepViolation = artifactPolicyViolation(artifact, action);
       if (stepViolation) return fail("policy_blocked", "An action inside the artifact's own allowlist.", stepViolation);
@@ -186,6 +218,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       await logger.event({ type: "action", step: index + 1, action, resultUrl: actionResult.url });
       observation = await observeAfterAction(surface, observation.stateHash, step.wait.timeout_ms);
 
+      // Re-observe after the action, then detect hard failures, declared outcomes,
+      // recovery conditions, escalation walls, and finally step postconditions.
       const global = detectGlobalFailure(observation);
       if (global) {
         if (global.class !== "session_lost" || !options.handoff) return fail(global.class, "A healthy application screen after the action.", global.observed);
@@ -214,6 +248,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     }
   }
 
+  // Steps alone do not prove success. Require the capability-level checkpoint,
+  // then independently resolve and read every declared extraction target.
   currentStep = "checkpoint";
   currentIntent = "Verify the capability-level success condition";
   const finalObservation = await surface.observe();
@@ -230,12 +266,16 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     outputs[extraction.output] = extraction.parse === "number" ? Number(raw.replace(/[^0-9.-]/g, "")) : raw;
     if (artifact.outputs.properties[extraction.output]?.sensitive) logger.markSensitive(String(outputs[extraction.output]));
   }
+
+  // Success returns outputs plus locator stability and intervention telemetry,
+  // then completes the same evidence/redaction lifecycle as every other outcome.
   const result: ReplayResult = { status: "success", outputs, evidence: logger.directory, stability: stats, ...interventionPart() };
   await logger.event({ type: "result", status: "success", detail: result });
   await logger.result(result);
   await logger.finalizeRedaction();
   return result;
 
+  // Declared business states are valid terminal outcomes, not system failures.
   async function detectOutcome(stepId: string, observation: Observation): Promise<ReplayResult | undefined> {
     for (const outcome of artifact.outcomes) {
       if (!outcome.at_steps.includes(stepId)) continue;
@@ -251,6 +291,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     return undefined;
   }
 
+  // Apply only artifact-declared, attempt-bounded recovery. Recovery actions pass
+  // the same capability and deployment policy checks as normal steps.
   async function applyRecovery(observation: Observation, stepNumber: number): Promise<boolean> {
     for (const rule of artifact.recovery) {
       if (!(await predicateMatches(rule.condition, observation, surface))) continue;
@@ -274,6 +316,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     return false;
   }
 
+  // Verify every saved postcondition. Input-value checks re-resolve the target and
+  // compare the live control value with the invocation parameter.
   async function postconditionsMatch(step: CapabilityArtifact["steps"][number], observation: Observation): Promise<boolean> {
     for (const predicate of step.postconditions) {
       const predicateTarget = step.target;
@@ -294,6 +338,8 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     reason: string,
     requestedAction: string
   ): Promise<"completed" | "retry" | "checkpoint" | "failed" | "timed_out"> {
+    // Pause the same browser session and avoid screenshots when the invocation is
+    // sensitive. The human receives reason, intent, current state, and requested work.
     const handoff = options.handoff;
     if (!handoff) return "failed";
     let screenshot: string | undefined;
@@ -309,9 +355,12 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       ...(screenshot ? { screenshot } : {}),
       recentEvents: [{ url: observation.url, title: observation.title, stateHash: observation.stateHash }]
     });
-    // An expired request leaves the lease aborted, so there is nothing to resume
-    // and no state to re-derive from - only a terminal result to report.
+
+    // An expired request leaves no state to resume and becomes a structured timeout.
     if (request.status === "aborted") return "timed_out";
+
+    // Re-observe after handback and derive the next position from actual UI state:
+    // final checkpoint, completed step, retryable target, or unsafe divergence.
     const resumedObservation = await surface.observe();
     let decision: "completed" | "retry" | "checkpoint" | "failed" = "failed";
     if (await allPredicatesMatch(artifact.checkpoint.assert, resumedObservation, surface)) decision = "checkpoint";
@@ -321,16 +370,19 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     return decision;
   }
 
+  // Add intervention metadata only when at least one handoff occurred.
   function interventionPart(): { intervention?: { count: number; requestIds: string[] } } {
     const summary = options.handoff?.summary();
     return summary && summary.count > 0 ? { intervention: summary } : {};
   }
 
+  // Convert every technical terminal path into a structured failure. Evidence
+  // capture is defensive so even a dead browser still produces result.json.
   async function fail(failureClass: FailureClass, expected: string, observed: string): Promise<ReplayResult> {
     let observation: Observation | undefined;
     try { observation = await surface.observe({ screenshot: !sensitiveRun }); } catch { observation = undefined; }
     let dom = "DOM snapshot unavailable: the browser session was no longer reachable.";
-    try { dom = await surface.snapshotDom(); } catch { /* keep the fallback so the failure result itself survives */ }
+    try { dom = await surface.snapshotDom(); } catch { /* Browser may already be unreachable; keep the fallback text. */ }
     const bundle = await logger.failureBundle({ screenshot: observation?.screenshot, dom, ...(lastAttempts ? { attempts: lastAttempts } : {}) });
     const result: ReplayResult = { status: "failure", failure: { class: failureClass, step: currentStep, intent: currentIntent, expected, observed, ...bundle }, evidence: logger.directory, ...interventionPart() };
     await logger.event({ type: "result", status: "failure", detail: result });

@@ -1,5 +1,11 @@
+// Builds the system prompt used only during discovery. It teaches the model to
+// work from semantic refs, mark outputs, protect sensitive data, and escalate
+// uncertainty. These instructions guide behaviour; tool schemas, ref checks,
+// and the PolicyEngine remain the actual enforcement boundary.
 import type { PolicyConfig } from "../policy/engine.js";
 
+// Insert run-specific controls into the otherwise stable prompt: the deployment
+// allowlist, whether this discovery may mutate data, and exact output names.
 export function discoverySystemPrompt(policy: PolicyConfig, allowMutations: boolean, expectedOutputs: readonly string[] = []): string {
   return `You control a legacy business application through a semantic element digest. Complete the stated goal safely.
 

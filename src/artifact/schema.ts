@@ -1,7 +1,12 @@
+// Executable runtime contract for persisted capabilities. Strict Zod objects
+// reject unknown fields, constrain every action/locator/predicate shape, and
+// cross-check parameter and output references before replay can load an artifact.
 import { z } from "zod";
 
+// Unknown keys are rejected everywhere instead of being silently retained.
 const strict = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 
+// Exact schema for each of the seven verified locator strategy kinds.
 const roleName = strict({ kind: z.literal("role_name"), role: z.string(), name: z.string(), frame: z.string(), unique: z.literal(true), confidence: z.number().min(0).max(1) });
 const labelProximity = strict({ kind: z.literal("label_proximity"), label: z.string(), control: z.string(), frame: z.string(), unique: z.literal(true), confidence: z.number().min(0).max(1) });
 const text = strict({ kind: z.literal("text"), value: z.string(), control: z.string().optional(), frame: z.string(), unique: z.literal(true), confidence: z.number().min(0).max(1) });
@@ -12,6 +17,8 @@ const geometry = strict({ kind: z.literal("geometry"), bboxPct: z.tuple([z.numbe
 export const locatorStrategySchema = z.discriminatedUnion("kind", [roleName, labelProximity, text, labelAdjacentCell, attrCss, structural, geometry]);
 export const targetSchema = strict({ frame: z.string().optional(), strategies: z.array(locatorStrategySchema).min(1) });
 
+// Small JSON-like contracts describe accepted invocation inputs and returned
+// outputs, including sensitivity and parsing-format metadata.
 const jsonPropertySchema = strict({
   type: z.enum(["string", "number", "integer", "boolean"]),
   description: z.string().optional(),
@@ -25,11 +32,14 @@ export const objectContractSchema = strict({
   required: z.array(z.string()),
   properties: z.record(z.string(), jsonPropertySchema)
 }).superRefine((contract, context) => {
+  // A required name must also have a declared property schema.
   for (const required of contract.required) {
     if (!(required in contract.properties)) context.addIssue({ code: "custom", message: `Required property ${required} is not declared.` });
   }
 });
 
+// Replay actions are declarative and bounded. Type/select values must come from
+// named parameters, so credentials or discovery literals cannot hide here.
 const actionSchema = z.discriminatedUnion("kind", [
   strict({ kind: z.literal("navigate"), url: z.string().url() }),
   strict({ kind: z.enum(["click", "focus"]) }),
@@ -39,6 +49,8 @@ const actionSchema = z.discriminatedUnion("kind", [
   strict({ kind: z.literal("scroll"), direction: z.enum(["up", "down"]) })
 ]);
 
+// Closed predicate vocabulary used for preconditions, step postconditions,
+// business outcomes, recovery conditions, and the final checkpoint.
 export const predicateSchema = z.discriminatedUnion("kind", [
   strict({ kind: z.literal("text_visible"), pattern: z.string(), frame: z.string().optional() }),
   strict({ kind: z.literal("element_present"), target: targetSchema }),
@@ -55,11 +67,14 @@ const stepSchema = strict({
   wait: strict({ readyWhen: z.enum(["target_resolvable", "page_loaded"]), timeout_ms: z.number().int().positive() }),
   postconditions: z.array(predicateSchema)
 }).superRefine((step, context) => {
+  // Element actions are invalid without a durable target locator ladder.
   if (["click", "focus", "type", "select"].includes(step.action.kind) && !step.target) {
     context.addIssue({ code: "custom", message: `Action ${step.action.kind} requires a target.` });
   }
 });
 
+// Recovery is intentionally narrower than normal steps: one declared condition,
+// one target click, and a positive attempt limit.
 const recoverySchema = strict({
   id: z.string(),
   condition: predicateSchema,
@@ -67,6 +82,8 @@ const recoverySchema = strict({
   max_attempts: z.number().int().positive()
 });
 
+// Complete immutable capability document: identity/provenance, contracts, entry,
+// ordered steps, success checkpoint, extraction, outcomes, recovery, and policy.
 export const capabilityArtifactSchema = strict({
   schema_version: z.literal("1.0"),
   capability: strict({
@@ -83,10 +100,10 @@ export const capabilityArtifactSchema = strict({
       recorded_at: z.string().datetime(),
       approved_by: z.string().nullable(),
       approved_at: z.string().datetime().nullable(),
-      // Hashes rather than values: approval has to prove it exercised different
-      // inputs from discovery without putting those inputs back in the file.
+      // Equality fingerprints let approval compare invocations without storing
+      // the literal discovery values in these fields.
       input_fingerprint: z.record(z.string(), z.string()).optional(),
-      // The evidence that admitted this capability. Absent while it is a draft.
+      // Successful validation evidence is absent/null while the artifact is draft.
       validation: strict({
         run: z.string(),
         validated_at: z.string().datetime(),
@@ -109,6 +126,8 @@ export const capabilityArtifactSchema = strict({
   recovery: z.array(recoverySchema),
   policy: strict({ allowed_origins: z.array(z.string().url()).min(1), allowed_actions: z.array(z.enum(["navigate", "click", "focus", "type", "select", "press", "scroll"])), max_duration_ms: z.number().int().positive() })
 }).superRefine((artifact, context) => {
+  // Shape validation is not enough: every step parameter and extraction output
+  // must refer to a name declared in the corresponding input/output contract.
   const inputNames = new Set(Object.keys(artifact.inputs.properties));
   const outputNames = new Set(Object.keys(artifact.outputs.properties));
   artifact.steps.forEach((step, index) => {
@@ -121,5 +140,7 @@ export const capabilityArtifactSchema = strict({
   });
 });
 
+// Infer TypeScript types from the runtime schemas so compile-time and persisted
+// artifact contracts remain sourced from the same definitions.
 export type CapabilityArtifact = z.infer<typeof capabilityArtifactSchema>;
 export type ObjectContract = z.infer<typeof objectContractSchema>;

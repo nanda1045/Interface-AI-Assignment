@@ -1,14 +1,21 @@
+// Recursive text redaction shared by evidence and artifact distillation. It
+// removes exact values learned during a run plus common credential/financial
+// patterns, while preserving the surrounding JSON structure for auditability.
 const redacted = "«redacted»";
+
+// Baseline patterns protect recognised regulated/secret formats even when the
+// caller did not explicitly mark that exact value during the run.
 const secretPatterns = [
   /\b\d{3}-\d{2}-\d{4}\b/g,
   /\b(?:\d[ -]*?){12,19}\b/g,
   /\b(?:sk|key|token)_[A-Za-z0-9_-]{12,}\b/gi,
   /Bearer\s+[A-Za-z0-9._~+/-]+=*/gi,
-  // Regulated financial data: no dollar balance persists raw, even when it was
-  // never individually marked sensitive (e.g. adjacent accounts in a digest).
+  // Protect dollar balances even when a neighbouring value was never marked.
   /\$\s?\d[\d,]*\.\d{2}\b/g
 ];
 
+// Replace longer exact values first to avoid a shorter value partially exposing
+// or changing a longer secret, then apply the general format patterns.
 export function redactString(value: string, sensitiveValues: readonly string[] = []): string {
   let scrubbed = value;
   for (const secret of sensitiveValues.filter(Boolean).sort((left, right) => right.length - left.length)) {
@@ -18,6 +25,8 @@ export function redactString(value: string, sensitiveValues: readonly string[] =
   return scrubbed;
 }
 
+// Walk arbitrary JSON-like data and redact string values without changing keys,
+// booleans, numbers, or the overall evidence structure.
 export function redactValue<T>(value: T, sensitiveValues: readonly string[] = []): T {
   if (typeof value === "string") return redactString(value, sensitiveValues) as T;
   if (Array.isArray(value)) return value.map((item) => redactValue(item, sensitiveValues)) as T;

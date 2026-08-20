@@ -1,5 +1,13 @@
+// Browser-independent UI contract shared by discovery and replay. Neither engine
+// imports Playwright; they observe and act only through the types and Surface
+// interface in this file, which also makes fake-screen testing possible.
+
+// Temporary identifier assigned during one observation. It is safe for the model
+// to select but is never treated as a durable locator across page states.
 export type ElementRef = string;
 
+// Complete bounded action vocabulary that trusted Surface implementations may
+// execute. Selectors, JavaScript, and arbitrary browser APIs are intentionally absent.
 export type AbstractAction =
   | { kind: "navigate"; url: string }
   | { kind: "click" | "focus"; ref: ElementRef }
@@ -8,6 +16,8 @@ export type AbstractAction =
   | { kind: "press"; key: string }
   | { kind: "scroll"; direction: "up" | "down" };
 
+// Text/semantic description of one visible UI element. Normalised geometry and
+// nearby labels help locator capture without exposing the full DOM to the model.
 export interface DigestElement {
   ref: ElementRef;
   frame: string;
@@ -20,6 +30,8 @@ export interface DigestElement {
   hints: { nearLabel?: string; sectionHeading?: string };
 }
 
+// Snapshot of the current UI state. Screenshots are optional evidence; discovery
+// removes them before its model request. stateHash supports stuck-state detection.
 export interface Observation {
   url: string;
   title: string;
@@ -29,12 +41,16 @@ export interface Observation {
   stateHash: string;
 }
 
+// Every persisted strategy was verified as unique for the exact selected node at
+// capture time. Confidence orders stronger semantic strategies before fallbacks.
 interface LocatorStrategyBase {
   frame: string;
   unique: true;
   confidence: number;
 }
 
+// The seven durable ways this system can rediscover a recorded element. A target
+// stores several in ranked order so replay can walk down a locator ladder.
 export type LocatorStrategy =
   | (LocatorStrategyBase & { kind: "role_name"; role: string; name: string })
   | (LocatorStrategyBase & { kind: "label_proximity"; label: string; control: string })
@@ -44,22 +60,29 @@ export type LocatorStrategy =
   | (LocatorStrategyBase & { kind: "structural"; value: string })
   | (LocatorStrategyBase & { kind: "geometry"; bboxPct: [number, number, number, number]; nearText?: string });
 
+// Capture-time ladder saved for a selected action target or output location.
 export interface LocatorBundle {
   capturedAt: string;
   strategies: LocatorStrategy[];
 }
 
+// Artifact form of a replay target. Strategies remain ordered from strongest to
+// weakest and may be adapted by an approved tenant overlay.
 export interface TargetSpec {
   frame?: string;
   strategies: LocatorStrategy[];
 }
 
+// One rung's replay result, retained so failures can show every attempted locator
+// and successful runs can report tier/strategy drift telemetry.
 export interface ResolutionAttempt {
   strategy: LocatorStrategy;
   matched: number;
   reason?: "frame_not_found" | "not_unique" | "not_visible" | "disabled" | "geometry_too_far";
 }
 
+// Successful resolution returns a fresh temporary ref plus the exact strategy
+// and tier that worked. Failure returns the full exhausted-attempt history.
 export interface ResolvedElement {
   ok: true;
   ref: ElementRef;
@@ -80,6 +103,8 @@ export interface ActResult {
   url: string;
 }
 
+// The only UI capabilities available to the engines. WebSurface implements this
+// with Playwright; unit tests implement the same interface with controlled fakes.
 export interface Surface {
   observe(options?: { screenshot?: boolean }): Promise<Observation>;
   act(action: AbstractAction): Promise<ActResult>;

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Application composition root: this file accepts CLI commands and wires the
+// browser adapter, engines, policies, artifact store, evidence, and handoff.
+// Business logic stays in those modules; this file coordinates their use.
 import "dotenv/config";
 import { Command } from "commander";
 import { chromium } from "playwright";
@@ -21,6 +24,8 @@ import { replay } from "./replay/engine.js";
 import type { ReplayResult } from "./replay/result.js";
 import { WebSurface } from "./surface/web-playwright.js";
 
+// Discovery can use either provider through one LLMClient interface. Replay
+// never calls this function, which keeps the model out of deterministic runs.
 function chooseClient(provider: "openai" | "anthropic"): LLMClient {
   if (provider === "openai") {
     if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required for --provider openai.");
@@ -30,6 +35,8 @@ function chooseClient(provider: "openai" | "anthropic"): LLMClient {
   return new AnthropicClient(process.env.ANTHROPIC_API_KEY);
 }
 
+// Convert repeatable CLI values such as --param member_id=8832 into an object.
+// Splitting at the first '=' also permits values that contain '=' themselves.
 function parseAssignments(values: string[]): Record<string, string> {
   return Object.fromEntries(values.map((assignment) => {
     const separator = assignment.indexOf("=");
@@ -38,6 +45,8 @@ function parseAssignments(values: string[]): Record<string, string> {
   }));
 }
 
+// All inputs needed to create one deterministic replay session. Optional fields
+// enable test or operational features without changing the replay engine.
 interface ReplayRunOptions {
   reference: string;
   params: Record<string, string>;
@@ -52,18 +61,22 @@ interface ReplayRunOptions {
   handoff?: boolean;
   consolePort?: string;
   confirmMutations?: boolean;
-  /** Injected before the application's own scripts, to measure what the locator
-   *  ladder survives. Absent for every ordinary run. */
+  // Used only by stress runs to change the UI before application scripts run.
   mutationScript?: string;
 }
 
-// Shared by `replay` and by the validation replay behind `approve`, so approval
-// is earned through the same execution path a caller would use in production.
+// Shared execution path for replay, approval validation, and stress runs. This
+// prevents approval or testing from using an easier path than normal replay.
 async function runReplay(options: ReplayRunOptions): Promise<{ result: ReplayResult; runId: string }> {
+  // Load the immutable capability contract, then optionally adapt its approved
+  // deployment-specific fields with a tenant overlay.
   const store = new ArtifactStore(options.artifactRoot);
   let artifact = await store.load(options.reference);
   if (options.overlay) artifact = applyOverlay(artifact, await loadOverlay(options.overlay));
   if (options.handoff && options.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
+
+  // Create the real browser session. Mock authentication is deliberately
+  // restricted to the two fictional localhost tenants.
   const browser = await chromium.launch({ headless: options.headless });
   const context = await browser.newContext();
   const entry = new URL(artifact.entry.url);
@@ -73,7 +86,13 @@ async function runReplay(options: ReplayRunOptions): Promise<{ result: ReplayRes
   }
   if (options.chaos) await context.addCookies([{ name: "cp_chaos", value: options.chaos, url: entry.origin, httpOnly: true, sameSite: "Lax" }]);
   const page = await context.newPage();
+
+  // Stress mutations are injected only when explicitly requested. Ordinary
+  // replay runs against the page without this script.
   if (options.mutationScript) await page.addInitScript({ content: options.mutationScript });
+
+  // Evidence, human-control coordination, and the Playwright Surface all share
+  // this one browser session. The lease prevents agent and human acting together.
   const logger = new RunLogger(options.runId, options.runRoot);
   await logger.initialize();
   const controller = options.handoff ? new RunController(logger) : undefined;
@@ -84,12 +103,15 @@ async function runReplay(options: ReplayRunOptions): Promise<{ result: ReplayRes
     console.error(`Operator console: http://127.0.0.1:${options.consolePort ?? 4590}`);
   }
   try {
+    // The replay engine receives only abstractions and validated inputs. Both
+    // the artifact policy and deployment policy are enforced inside replay.
     const result = await replay({
       artifact, params: options.params, surface, policy: await PolicyEngine.fromFile(options.policy),
       logger, confirmMutations: options.confirmMutations ?? false, ...(controller ? { handoff: controller } : {})
     });
     return { result, runId: options.runId };
   } finally {
+    // Always release the local console and browser, including on failure.
     if (consoleServer) await new Promise<void>((resolve, reject) => consoleServer.close((error) => error ? reject(error) : resolve()));
     await surface.close();
   }
@@ -97,6 +119,9 @@ async function runReplay(options: ReplayRunOptions): Promise<{ result: ReplayRes
 
 const program = new Command();
 program.name("corepoint-automation").description("Discover and replay deterministic computer-use capabilities.");
+
+// DISCOVER: let the LLM operate the browser through the bounded Surface API,
+// record the successful trajectory, and optionally distil it into a draft.
 program.command("discover")
   .requiredOption("--goal <goal>")
   .requiredOption("--url <url>")
@@ -118,6 +143,7 @@ program.command("discover")
   .option("--run-root <path>", "run evidence directory", "runs")
   .option("--run-id <id>", "explicit run id (useful for reproducible evidence)")
   .action(async (raw: { goal: string; url: string; provider: string; policy: string; headless: boolean; allowMutations: boolean; mockAuth: boolean; capabilityId?: string; title?: string; description?: string; param: string[]; output: string[]; artifactRoot: string; bump?: string; overwriteArtifact: boolean; handoff: boolean; consolePort: string; runRoot: string; runId?: string }) => {
+    // Discovery is the only command that creates an LLM client.
     if (raw.provider !== "openai" && raw.provider !== "anthropic") throw new Error("--provider must be openai or anthropic.");
     if (raw.handoff && raw.headless) throw new Error("--handoff requires a headed browser so the operator can control the live session.");
     const browser = await chromium.launch({ headless: raw.headless });
@@ -140,12 +166,15 @@ program.command("discover")
     const policy = await PolicyEngine.fromFile(raw.policy);
     const llm = chooseClient(raw.provider);
     try {
+      // The discovery loop returns a recorded trajectory with verified locator
+      // ladders; it does not directly write a capability artifact.
       const result = await runDiscovery({ goal: raw.goal, target: raw.url, surface, policy, llm, logger, allowMutations: raw.allowMutations, expectedOutputs: raw.output, ...(controller ? { handoff: controller } : {}) });
       if (result.status === "success" && raw.capabilityId) {
         const params = parseAssignments(raw.param);
         const store = new ArtifactStore(raw.artifactRoot);
-        // Versions are immutable, so a re-recording has to claim the next one
-        // rather than overwrite the reviewed artifact it supersedes.
+
+        // Re-recording normally creates a semantic successor so the previous
+        // reviewed artifact remains available for audit and rollback.
         let version: string | undefined;
         if (raw.bump) {
           if (raw.bump !== "patch" && raw.bump !== "minor" && raw.bump !== "major") throw new Error("--bump must be patch, minor or major.");
@@ -153,6 +182,10 @@ program.command("discover")
           if (!previous) throw new Error(`No existing ${raw.capabilityId} to bump; omit --bump to record the first version.`);
           version = bumpVersion(previous, raw.bump);
         }
+
+        // Plain deterministic code converts the successful trajectory into a
+        // typed draft. Parameters replace literals, and known run values are
+        // supplied so intent text and data-dependent locators can be scrubbed.
         const artifact = distillDiscovery(result, {
           id: raw.capabilityId,
           title: raw.title ?? raw.capabilityId.replace(/_/g, " "),
@@ -166,6 +199,9 @@ program.command("discover")
           inputs: { type: "object", required: Object.keys(params), properties: Object.fromEntries(Object.keys(params).map((name) => [name, { type: "string", sensitive: /member|account|ssn/i.test(name) }])) },
           outputs: { type: "object", required: Object.keys(result.outputs), properties: Object.fromEntries(Object.keys(result.outputs).map((name) => [name, { type: "string", ...(/member|name|balance|account|ssn/i.test(name) ? { sensitive: true } : {}), ...(name.includes("balance") ? { "x-format": "usd-currency" } : {}) }])) }
         });
+
+        // save() is create-only by default. In-place replacement requires the
+        // explicit --overwrite-artifact escape hatch.
         const artifactPath = raw.overwriteArtifact ? await store.write(artifact) : await store.save(artifact);
         await logger.artifact(artifact);
         console.error(`Draft artifact saved to ${artifactPath}`);
@@ -178,11 +214,11 @@ program.command("discover")
     }
   });
 
+// APPROVE: first prove the draft through the real replay path using different
+// inputs, then store reviewer identity and validation evidence in the artifact.
 program.command("approve")
   .argument("<reference>", "capability@version")
   .requiredOption("--by <reviewer>", "reviewer identity recorded in provenance")
-  // No default value, so commander enforces the flag rather than launching a
-  // browser and failing the replay on missing parameters.
   .requiredOption("--param <name=value>", "validation parameter; must differ from the discovery invocation", (value, previous: string[] = []) => [...previous, value])
   .option("--policy <path>", "policy YAML", "policies/default.yaml")
   .option("--artifact-root <path>", "artifact directory", "artifacts")
@@ -193,9 +229,9 @@ program.command("approve")
   .action(async (reference: string, raw: { by: string; param: string[]; policy: string; artifactRoot: string; overlay?: string; headless: boolean; mockAuth: boolean; runRoot: string }) => {
     const store = new ArtifactStore(raw.artifactRoot);
     const params = parseAssignments(raw.param);
-    // Approval is earned by a replay that actually ran, so the same execution
-    // path a caller would use has to succeed here first. A mutating capability
-    // really does perform its mutation, so validate it against test data.
+
+    // confirmMutations permits validation of a mutating draft, which means
+    // approval of such capabilities must always use safe test data.
     const validation = await runReplay({
       reference, params, policy: raw.policy, artifactRoot: raw.artifactRoot, overlay: raw.overlay,
       headless: raw.headless, mockAuth: raw.mockAuth, runRoot: raw.runRoot, runId: createRunId("replay"),
@@ -211,6 +247,8 @@ program.command("approve")
     }, null, 2));
   });
 
+// REPLAY: run a saved capability with no LLM. A technical failure receives a
+// non-zero exit code; a declared business outcome remains a valid run result.
 program.command("replay")
   .argument("<reference>", "capability@version")
   .option("--param <name=value>", "capability parameter", (value, previous: string[]) => [...previous, value], [])
@@ -236,6 +274,8 @@ program.command("replay")
     if (result.status === "failure") process.exitCode = 1;
   });
 
+// STRESS: replay under controlled UI mutations and require exact expected
+// outputs, so a run that resolves the wrong element cannot be called a success.
 program.command("stress")
   .description("Replay a capability under injected UI changes and report what the locator ladder survives.")
   .argument("<reference>", "capability@version")
@@ -262,9 +302,8 @@ program.command("stress")
     console.log(formatStressReport(rows));
   });
 
-// A refused approval or a bad flag is an ordinary outcome of running this tool,
-// not a crash. Operators get the sentence that matters and a non-zero exit; the
-// full detail is already in the run's evidence directory.
+// Present expected operator errors as concise messages while preserving a
+// failure exit code for scripts and CI.
 try {
   await program.parseAsync();
 } catch (error) {

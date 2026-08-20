@@ -1,10 +1,11 @@
+// Validated filesystem store for versioned capability artifacts. Normal saving is
+// create-only; approval records reviewer and successful validation provenance.
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fingerprintParams } from "./distill.js";
 import { capabilityArtifactSchema, type CapabilityArtifact } from "./schema.js";
 
-/** Proof that a replay of this capability actually succeeded, supplied by
- *  whoever ran it. Approval will not proceed without it. */
+// Evidence produced by the CLI's real validation replay and persisted on approval.
 export interface ApprovalEvidence {
   run: string;
   params: Record<string, string>;
@@ -18,6 +19,7 @@ export class ArtifactStore {
     return path.resolve(this.root, `${id}@${version}.json`);
   }
 
+  // Default immutable write: `wx` fails when that exact version already exists.
   public async save(artifact: CapabilityArtifact): Promise<string> {
     const validated = capabilityArtifactSchema.parse(artifact);
     await mkdir(this.root, { recursive: true });
@@ -26,6 +28,7 @@ export class ArtifactStore {
     return destination;
   }
 
+  // Explicit replacement path used for approval metadata and intentional overwrite.
   public async write(artifact: CapabilityArtifact): Promise<string> {
     const validated = capabilityArtifactSchema.parse(artifact);
     await mkdir(this.root, { recursive: true });
@@ -34,6 +37,7 @@ export class ArtifactStore {
     return destination;
   }
 
+  // Every artifact is schema-validated again when read from disk.
   public async load(reference: string): Promise<CapabilityArtifact> {
     const filename = reference.endsWith(".json") ? reference : `${reference}.json`;
     let contents: string;
@@ -47,9 +51,8 @@ export class ArtifactStore {
     return capabilityArtifactSchema.parse(JSON.parse(contents));
   }
 
-  // Approval takes evidence, not a flag. A caller cannot flip the status without
-  // a replay that actually ran, and the record of it stays in the artifact so a
-  // reviewer can see what admitted the capability rather than who said so.
+  // Turn a validated draft into an approved artifact while enforcing a different
+  // reviewer identity and a non-identical invocation fingerprint.
   public async approve(reference: string, approvedBy: string, validation: ApprovalEvidence, now = new Date()): Promise<CapabilityArtifact> {
     const artifact = await this.load(reference);
     if (artifact.capability.provenance.discovered_by === approvedBy) {
@@ -60,9 +63,8 @@ export class ArtifactStore {
     const reusedParams = fingerprint
       ? Object.keys(validated).filter((name) => fingerprint[name] === validated[name])
       : [];
-    // Replaying the discovery inputs re-runs the run we already have. Only a
-    // different invocation shows the recording is a capability and not a
-    // transcript of one member's data.
+    // Reusing every discovery input proves only the original transcript; at least
+    // one invocation value must differ before approval can proceed.
     if (fingerprint && reusedParams.length === Object.keys(validated).length) {
       throw new Error("Validation replayed the discovery inputs; approval needs a different invocation.");
     }
@@ -89,8 +91,7 @@ export class ArtifactStore {
     return approved;
   }
 
-  // Versions are immutable, so re-recording a capability needs to know what the
-  // previous one was rather than overwriting it.
+  // Find the highest semantic version so CLI --bump can create its successor.
   public async latestVersion(id: string): Promise<string | undefined> {
     const pattern = new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}@(\\d+)\\.(\\d+)\\.(\\d+)\\.json$`);
     return (await this.list())

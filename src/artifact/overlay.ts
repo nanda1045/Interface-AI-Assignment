@@ -1,3 +1,5 @@
+// Strict tenant-specific adaptation layer. An overlay may change entry URL and
+// locator targets, but cannot rewrite workflow actions, outcomes, risk, or inputs.
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { capabilityArtifactSchema, targetSchema, type CapabilityArtifact } from "./schema.js";
@@ -13,6 +15,8 @@ export const tenantOverlaySchema = z.object({
 
 export type TenantOverlay = z.infer<typeof tenantOverlaySchema>;
 
+// Apply only declared target replacements, update the capability origin when the
+// entry changes, then validate the complete adapted artifact again.
 export function applyOverlay(base: CapabilityArtifact, rawOverlay: TenantOverlay): CapabilityArtifact {
   const overlay = tenantOverlaySchema.parse(rawOverlay);
   if (overlay.capability !== base.capability.id) throw new Error(`Overlay ${overlay.tenant} targets ${overlay.capability}, not ${base.capability.id}.`);
@@ -22,6 +26,7 @@ export function applyOverlay(base: CapabilityArtifact, rawOverlay: TenantOverlay
   return capabilityArtifactSchema.parse({ ...base, entry: { ...base.entry, ...(overlay.entry_url ? { url: overlay.entry_url } : {}) }, steps, extract, policy });
 }
 
+// Treat overlay JSON as untrusted input and validate before use.
 export async function loadOverlay(path: string): Promise<TenantOverlay> {
   return tenantOverlaySchema.parse(JSON.parse(await readFile(path, "utf8")));
 }

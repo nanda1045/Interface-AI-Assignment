@@ -1,3 +1,5 @@
+// Small deterministic semantic-version helper used when re-recording a capability
+// without replacing the previously reviewed version.
 export type VersionBump = "patch" | "minor" | "major";
 
 export function bumpVersion(version: string, bump: VersionBump): string {

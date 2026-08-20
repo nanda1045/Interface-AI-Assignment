@@ -1,3 +1,6 @@
+// Deterministic compiler from a successful discovery trajectory to a typed,
+// parameterized capability artifact. It makes no second LLM call, removes
+// run-specific data/locators, derives policy, and validates the final contract.
 import { createHash } from "node:crypto";
 import type { DiscoveryResult, RecordedStep } from "../agent/loop.js";
 import { redactString } from "../policy/redact.js";
@@ -16,20 +19,18 @@ export interface DistillOptions {
   outputs: ObjectContract;
   risk?: "read_only" | "mutating" | "irreversible";
   recordedAt?: Date;
-  /** Defaults to a first recording; a re-record supplies the next version. */
+  // The first recording defaults to 1.0.0; re-recording supplies a bumped version.
   version?: string;
-  /** Values the run marked sensitive. The artifact is scrubbed against the same
-   *  list the evidence logger uses, so a capability cannot retain data the run
-   *  already decided was not safe to persist. */
+  // Values collected by the evidence logger and scrubbed from artifact strings.
   sensitiveValues?: readonly string[];
 }
 
-// Values shorter than this would match almost any serialized locator and blank
-// an entire ladder, so they are ignored rather than treated as run data.
+// Very short values would accidentally match common locator syntax and remove
+// almost every strategy, so taint matching starts at three characters.
 const minimumTaintedLength = 3;
 
-// Approval has to show it exercised different inputs from discovery, and the
-// artifact must not carry the inputs themselves, so only the hashes travel.
+// Store comparison fingerprints rather than literal discovery inputs so approval
+// can reject an identical invocation without writing the original value directly.
 export function fingerprintParams(params: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
     Object.entries(params).map(([name, value]) => [name, createHash("sha256").update(value).digest("hex").slice(0, 16)])
@@ -40,27 +41,23 @@ function containsAny(haystack: string, needles: readonly string[]): boolean {
   return needles.some((needle) => needle.length >= minimumTaintedLength && haystack.includes(needle));
 }
 
-// A locator built out of the run's own data is not a redaction problem, it is a
-// correctness problem: it resolves for the discovery member and fails for
-// everyone else. Dropping the strategy leaves the rest of the ladder usable;
-// only an emptied ladder is fatal.
+// Remove every locator containing an invocation/sensitive value. Keep the safe
+// remainder of the ladder, but fail closed when no reusable strategy remains.
 function untaintedTarget(bundle: LocatorBundle, tainted: readonly string[], describe: string): TargetSpec {
   const strategies: LocatorStrategy[] = bundle.strategies.filter((strategy) => !containsAny(JSON.stringify(strategy), tainted));
   if (strategies.length === 0) throw new Error(`Every locator strategy for ${describe} was built from run-specific data.`);
   return { frame: strategies[0]?.frame, strategies };
 }
 
-// Geometry drifts between two captures of the same element, so identity rests on
-// the semantic rungs; an element with none of those is never treated as matching.
+// Compare repeated targets using non-geometry strategies because coordinates can
+// move slightly between two observations of the same logical element.
 function targetIdentity(bundle?: LocatorBundle): string | undefined {
   const semantic = bundle?.strategies.filter((strategy) => strategy.kind !== "geometry") ?? [];
   return semantic.length > 0 ? JSON.stringify(semantic) : undefined;
 }
 
-// The model sometimes re-enters a value it has already entered. `type` and
-// `select` set a value rather than trigger one, so a consecutive repeat on the
-// same control is a no-op that should not be replayed forever. A repeated click
-// can be meaningful — adding a second row, say — so clicks are never collapsed.
+// Collapse only consecutive identical type/select operations on the same target.
+// Repeated clicks are preserved because they may represent meaningful actions.
 function repeatsNextValue(step: RecordedStep, next: RecordedStep): boolean {
   const identity = targetIdentity(step.locators);
   if (!identity || identity !== targetIdentity(next.locators)) return false;
@@ -69,6 +66,8 @@ function repeatsNextValue(step: RecordedStep, next: RecordedStep): boolean {
   return false;
 }
 
+// Replace recorded type/select literals with references to declared parameters.
+// Ambiguous, constant, or unused values fail instead of leaking into the artifact.
 function bindAction(action: AbstractAction, params: Record<string, string>, used: Set<string>): CapabilityArtifact["steps"][number]["action"] {
   if (action.kind === "type" || action.kind === "select") {
     const value = action.kind === "type" ? action.text : action.value;
@@ -87,6 +86,8 @@ function bindAction(action: AbstractAction, params: Record<string, string>, used
   return { kind: action.kind };
 }
 
+// Compile one recorded action into an artifact step with safe intent text,
+// durable target, wait rule, and deterministic postconditions.
 function distillStep(
   recorded: RecordedStep,
   index: number,
@@ -102,8 +103,9 @@ function distillStep(
     (current, [name, value]) => value ? current.split(value).join(`{{${name}}}`) : current,
     rawIntent
   );
-  // The model's reasoning becomes the intent text and can quote anything it read
-  // on screen, so it gets the same scrub as a persisted evidence line.
+
+  // Model reasoning may repeat data read from the page, so parameterize known
+  // inputs and redact every remaining run-sensitive value before persistence.
   const intent = redactString(parameterized, tainted);
   const postconditions: CapabilityArtifact["steps"][number]["postconditions"] = [];
   if (action.kind === "type" || action.kind === "select") postconditions.push({ kind: "value_equals_param", param: action.value_from.param });
@@ -118,15 +120,19 @@ function distillStep(
   };
 }
 
+// Compile only a successful, non-empty discovery and fail closed whenever the
+// result cannot become a complete, reusable, schema-valid capability.
 export function distillDiscovery(result: DiscoveryResult, options: DistillOptions): CapabilityArtifact {
   if (result.status !== "success") throw new Error(`Cannot distill a ${result.status} discovery run.`);
   if (result.steps.length === 0) throw new Error("Cannot distill a discovery run with no recorded actions.");
   const used = new Set<string>();
-  // Invocation values are tainted whether or not they were marked sensitive: a
-  // locator carrying one is broken for every other invocation.
+
+  // Every invocation value is run-specific even when it is not classified as
+  // sensitive; locators containing one would fail for future invocations.
   const tainted = [...new Set([...Object.values(options.params), ...(options.sensitiveValues ?? [])])].filter(Boolean);
-  // Keeping the last of a run of repeats preserves the settled URL the flow
-  // actually reached, which is what the postconditions are derived from.
+
+  // Keep the final step in each consecutive repeated type/select run because it
+  // contains the settled after-URL used to derive postconditions.
   const recorded = result.steps.filter((step, index) => {
     const next = result.steps[index + 1];
     return !(next && repeatsNextValue(step, next));
@@ -136,20 +142,26 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
   if (unbound.length > 0) throw new Error(`Supplied parameters were never bound: ${unbound.join(", ")}`);
   const outputEntries = Object.entries(result.outputs);
   if (outputEntries.length === 0) throw new Error("Discovery finished without any note_output calls.");
+
+  // Output extraction also uses taint-safe locator ladders. Parsing behaviour is
+  // derived from the declared output contract, not from model reasoning.
   const extract = outputEntries.map(([output, bundle]) => ({
     output,
     from: untaintedTarget(bundle, tainted, `extraction of ${output}`),
     parse: options.outputs.properties[output]?.["x-format"] === "usd-currency" ? "currency" as const : "text" as const
   }));
+
+  // Known bounded recovery is explicit in the artifact rather than improvised by
+  // the model during replay.
   const recovery: CapabilityArtifact["recovery"] = [{
     id: "dismiss_session_modal",
     condition: { kind: "dialog_present", textPattern: "Session expiring" },
     action: { kind: "click", target: { strategies: [{ kind: "role_name", role: "button", name: "Continue", frame: "workarea", unique: true, confidence: 0.9 }] } },
     max_attempts: 1
   }];
-  // A capability is only permitted the actions it actually performs. Entry
-  // navigation and recovery clicks are driven by the engine rather than by a
-  // step, so they are permitted explicitly instead of being inferred away.
+
+  // Derive least privilege from recorded steps plus engine-driven entry and
+  // recovery actions; do not grant every action supported by the platform.
   const allowedActions = [...new Set<CapabilityArtifact["policy"]["allowed_actions"][number]>([
     "navigate",
     ...steps.map((step) => step.action.kind),
@@ -158,6 +170,10 @@ export function distillDiscovery(result: DiscoveryResult, options: DistillOption
   const undeclared = extract.map((item) => item.output).filter((output) => !(output in options.outputs.properties));
   if (undeclared.length > 0) throw new Error(`Marked outputs are not declared in the output contract: ${undeclared.join(", ")}`);
   const origin = new URL(options.entryUrl).origin;
+
+  // Construct the complete draft, including provenance, business outcomes,
+  // recovery, checkpoint, and capability-level policy. The strict Zod schema is
+  // the final runtime gate before the artifact may be saved.
   return capabilityArtifactSchema.parse({
     schema_version: "1.0",
     capability: {
