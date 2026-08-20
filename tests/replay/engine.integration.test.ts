@@ -94,6 +94,19 @@ describe("deterministic replay against the hostile live app", () => {
     expect(log).not.toContain("$3,109.08");
   });
 
+  it("detects a session lost inside the workspace frame, not just at the top level", async () => {
+    // This app does its work in an iframe, so a killed session redirects the
+    // frame to /login while the top-level document stays on /desk. Checking only
+    // the outer URL made session_lost unreachable and surfaced as a confusing
+    // target_not_found instead.
+    const result = await execute("8832", "session_kill");
+    expect(result).toMatchObject({ status: "failure", failure: { class: "session_lost" } });
+    if (result.status !== "failure") throw new Error("expected a failure");
+    expect(result.failure.observed).toContain("workspace frame");
+    // Read-only and caused by the application, so the caller is told to retry.
+    expect(result.failure.disposition).toBe("retry");
+  });
+
   it("returns not-found as a business outcome rather than a failure", async () => {
     const result = await execute("9999");
     expect(result).toMatchObject({ status: "business_outcome", code: "MEMBER_NOT_FOUND", data: { found: false } });

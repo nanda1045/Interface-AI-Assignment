@@ -25,7 +25,7 @@ class FakeSurface implements Surface {
       : this.observationIndex === 2
         ? [{ ref: "search", frame: "workarea", role: "button", name: "Search", text: "Search", state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.2, 0.1] as [number, number, number, number], hints: {} }]
         : [{ ref: "balance", frame: "workarea", role: "text", name: "$2,481.13", text: "$2,481.13", state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.2, 0.1] as [number, number, number, number], hints: {} }];
-    return { url: "http://localhost:4478/desk", title: "CorePoint", frames: ["main", "workarea"], elements, screenshot: "data:image/png;base64,iVBORw0KGgo=", stateHash: `state-${this.observationIndex}` };
+    return { url: "http://localhost:4478/desk", title: "CorePoint", frames: [{ path: "main", url: "http://localhost:4478/desk" }, { path: "workarea", url: "http://localhost:4478/workspace/search" }], elements, screenshot: "data:image/png;base64,iVBORw0KGgo=", stateHash: `state-${this.observationIndex}` };
   }
 
   public async act(action: AbstractAction) {

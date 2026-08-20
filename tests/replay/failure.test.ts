@@ -14,7 +14,7 @@ class ErrorSurface implements Surface {
 
   public async observe(options?: { screenshot?: boolean }): Promise<Observation> {
     const error = this.acted;
-    return { url: "http://localhost:4478/workspace/submit", title: "CorePoint", frames: ["main"], elements: error ? [{ ref: "error", frame: "main", role: "heading", name: "Unexpected Application Error", text: "Unexpected Application Error", state: { visible: true, enabled: true }, bboxPct: [0, 0, 1, 0.1], hints: {} }] : [{ ref: "submit", frame: "main", role: "button", name: "Submit", text: "Submit", state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.1, 0.1], hints: {} }], ...(options?.screenshot ? { screenshot: "data:image/png;base64,iVBORw0KGgo=" } : {}), stateHash: error ? "error" : "ready" };
+    return { url: "http://localhost:4478/workspace/submit", title: "CorePoint", frames: [{ path: "main", url: "http://localhost:4478/workspace/submit" }], elements: error ? [{ ref: "error", frame: "main", role: "heading", name: "Unexpected Application Error", text: "Unexpected Application Error", state: { visible: true, enabled: true }, bboxPct: [0, 0, 1, 0.1], hints: {} }] : [{ ref: "submit", frame: "main", role: "button", name: "Submit", text: "Submit", state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.1, 0.1], hints: {} }], ...(options?.screenshot ? { screenshot: "data:image/png;base64,iVBORw0KGgo=" } : {}), stateHash: error ? "error" : "ready" };
   }
 
   public async act(action: AbstractAction) {
@@ -34,7 +34,7 @@ class ErrorSurface implements Surface {
 class SupervisorWallSurface implements Surface {
   public async observe(options?: { screenshot?: boolean }): Promise<Observation> {
     return {
-      url: "http://localhost:4478/workspace/submit", title: "CorePoint", frames: ["main"],
+      url: "http://localhost:4478/workspace/submit", title: "CorePoint", frames: [{ path: "main", url: "http://localhost:4478/workspace/submit" }],
       elements: [{ ref: "wall", frame: "main", role: "heading", name: "Supervisor override required", text: "Supervisor override required", state: { visible: true, enabled: true }, bboxPct: [0, 0, 1, 0.1], hints: {} }],
       ...(options?.screenshot ? { screenshot: "data:image/png;base64,iVBORw0KGgo=" } : {}),
       stateHash: "wall"

@@ -33,9 +33,16 @@ export interface DigestElement {
 // Snapshot of the current UI state. Screenshots are optional evidence; discovery
 // removes them before its model request. stateHash supports stuck-state detection.
 export interface Observation {
+  /** Where the top-level document is. On a framed application this is not
+   *  where the work is happening, so it is not sufficient on its own to say
+   *  what state the application is in - see `frames`. */
   url: string;
   title: string;
-  frames: string[];
+  /** Each frame's path and where that frame currently is. A single `url` assumed
+   *  a single-document surface; a legacy app with a workspace frame has more
+   *  than one location, and a session can be lost in one of them while the
+   *  top-level document stays put. */
+  frames: { path: string; url: string }[];
   elements: DigestElement[];
   screenshot?: string;
   stateHash: string;

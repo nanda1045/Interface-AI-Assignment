@@ -35,9 +35,27 @@ export async function allPredicatesMatch(predicates: CapabilityArtifact["checkpo
 }
 
 // Recognise application-wide terminal failures before/after individual steps.
+// Frames report locations like "about:blank" that are not parseable URLs, and a
+// detector must never be the thing that throws.
+function pathOf(location: string): string | undefined {
+  try {
+    return new URL(location).pathname;
+  } catch {
+    return undefined;
+  }
+}
+
 export function detectGlobalFailure(observation: Observation): { class: "session_lost" | "app_error"; observed: string } | undefined {
   const text = pageText(observation);
-  if (new URL(observation.url).pathname === "/login") return { class: "session_lost", observed: "The application redirected to the login screen." };
+  // A framed application loses its session inside the workspace frame while the
+  // top-level document stays exactly where it was, so every location has to be
+  // considered rather than only the outermost one.
+  const locations = [observation.url, ...observation.frames.map((frame) => frame.url)];
+  const loggedOut = locations.find((location) => pathOf(location) === "/login");
+  if (loggedOut) {
+    const where = loggedOut === observation.url ? "" : " in the workspace frame";
+    return { class: "session_lost", observed: `The application redirected to the login screen${where}.` };
+  }
   if (/Unexpected Application Error|could not complete the request|HTTP\s*5\d\d/i.test(text)) return { class: "app_error", observed: "The application displayed an unexpected error page." };
   return undefined;
 }

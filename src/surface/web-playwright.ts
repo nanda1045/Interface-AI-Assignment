@@ -74,7 +74,7 @@ export class WebSurface implements Surface {
     return {
       url: this.page.url(),
       title: await this.page.title(),
-      frames: frames.map(getFramePath),
+      frames: frames.map((frame) => ({ path: getFramePath(frame), url: frame.url() })),
       elements,
       ...(screenshot ? { screenshot } : {}),
       stateHash: stateHash(elements, this.page.url())

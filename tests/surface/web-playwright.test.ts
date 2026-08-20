@@ -35,7 +35,13 @@ describe("WebSurface", () => {
   it("builds a frame-aware digest with labels inferred from table proximity", async () => {
     const observation = await surface.observe({ screenshot: true });
     const field = observation.elements.find((element) => element.hints.nearLabel === "Member No.");
-    expect(observation.frames).toContain("workarea");
+    // Frames carry where they are, not just what they are called: a framed app
+    // can lose its session inside the workspace while the top document stays put.
+    // This fixture uses a srcdoc frame, so its location is "about:srcdoc" - a
+    // reminder that a frame URL is not always parseable and a detector reading
+    // one must not throw. The live-app case is covered in the replay tests.
+    expect(observation.frames.map((frame) => frame.path)).toContain("workarea");
+    expect(typeof observation.frames.find((frame) => frame.path === "workarea")?.url).toBe("string");
     expect(field).toMatchObject({ frame: "workarea", role: "textbox", name: "Member No.", state: { visible: true, enabled: true } });
     expect(observation.screenshot).toMatch(/^data:image\/png;base64,/);
     expect(observation.stateHash).toHaveLength(20);
