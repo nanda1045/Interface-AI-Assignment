@@ -125,6 +125,11 @@ export async function digestFrame(frame: Frame, observationId: string): Promise<
       const semanticName = clean(element.getAttribute("aria-label")) ||
         clean(element.getAttribute("title")) ||
         (role === "textbox" || role === "combobox" ? nearLabel : text) ||
+        // A legacy <input type="submit"> has no text content - its visible
+        // label IS its value attribute. Without this, "Post Transfer" reaches
+        // the risk classifier as an empty name and the irreversible guard
+        // never fires.
+        (role === "button" && typeof (element as HTMLInputElement).value === "string" ? clean((element as HTMLInputElement).value) : "") ||
         clean(element.getAttribute("name"));
       const control = element as HTMLInputElement;
       // A select's option VALUES are not visible as text ("Last Name" may

@@ -100,7 +100,7 @@ function repeatsNextValue(step: RecordedStep, next: RecordedStep): boolean {
 
 // Replace recorded type/select literals with references to declared parameters.
 // Ambiguous, constant, or unused values fail instead of leaking into the artifact.
-function bindAction(action: AbstractAction, params: Record<string, string>, used: Set<string>, sensitiveParams?: Set<string>): CapabilityArtifact["steps"][number]["action"] {
+function bindAction(action: AbstractAction, params: Record<string, string>, used: Set<string>, sensitiveParams?: Set<string>, tainted: readonly string[] = []): CapabilityArtifact["steps"][number]["action"] {
   if (action.kind === "type" || action.kind === "select") {
     const value = action.kind === "type" ? action.text : action.value;
     const matches = Object.entries(params).filter(([, candidate]) => candidate === value);
@@ -109,6 +109,11 @@ function bindAction(action: AbstractAction, params: Record<string, string>, used
     // Typed text gets no such fallback: free text that binds to nothing is
     // either missing a parameter or data that must not be frozen in.
     if (matches.length === 0 && action.kind === "select") {
+      // ...unless the value embeds run-specific data ("103001-S0001" carries
+      // the member number). That is not a flow constant; freezing it would
+      // both leak this run's data and pin replay to this member.
+      const embedded = tainted.find((candidate) => candidate && action.value.includes(candidate));
+      if (embedded) throw new Error("A recorded select value contains run-specific data and matches no parameter; declare a parameter that supplies the full option value.");
       return { kind: "select", value: action.value };
     }
     if (matches.length !== 1) throw new Error(`Could not uniquely bind recorded ${action.kind} value to a supplied parameter.`);
@@ -167,7 +172,7 @@ function distillStep(
   tainted: readonly string[],
   sensitiveParams?: Set<string>
 ): CapabilityArtifact["steps"][number] {
-  const action = bindAction(recorded.action, params, used, sensitiveParams);
+  const action = bindAction(recorded.action, params, used, sensitiveParams, tainted);
   const target = recorded.locators ? untaintedTarget(recorded.locators, tainted, `step ${index + 1}`) : undefined;
 
   // Intent is SYNTHESIZED from the bound action and the target's label, never

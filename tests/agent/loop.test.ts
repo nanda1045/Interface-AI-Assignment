@@ -42,12 +42,17 @@ class FakeSurface implements Surface {
 }
 
 // Offers a final-action button by the given name so profile-driven
-// irreversible detection can be exercised.
+// irreversible detection can be exercised. `legacySubmit` mimics MERIDIAN's
+// <input type="submit">: empty name and text, label only in value - the shape
+// that once slipped a live Post Transfer click past the risk classifier.
 class FinalActionSurface extends FakeSurface {
-  public constructor(private readonly buttonName: string) { super(); }
+  public constructor(private readonly buttonName: string, private readonly legacySubmit = false) { super(); }
   public override async observe(): Promise<Observation> {
     const base = await super.observe();
-    return { ...base, elements: [{ ref: "final", frame: "workarea", role: "button", name: this.buttonName, text: this.buttonName, state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.2, 0.1], hints: {} }] };
+    const button = this.legacySubmit
+      ? { ref: "final", frame: "workarea", role: "button", name: "", value: this.buttonName, state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.2, 0.1] as [number, number, number, number], hints: {} }
+      : { ref: "final", frame: "workarea", role: "button", name: this.buttonName, text: this.buttonName, state: { visible: true, enabled: true }, bboxPct: [0, 0, 0.2, 0.1] as [number, number, number, number], hints: {} };
+    return { ...base, elements: [button] };
   }
 }
 
@@ -61,6 +66,16 @@ class FakeCoordinator implements HandoffCoordinator {
 
   public async resume(): Promise<void> {}
   public summary() { return { count: this.requests.length, requestIds: this.requests.map((_, index) => `int_${index + 1}`) }; }
+}
+
+// Handoff that blocks longer than the entire wall-clock budget, to prove human
+// pause time is excluded from it.
+class SlowCoordinator extends FakeCoordinator {
+  public constructor(private readonly waitMs: number) { super(); }
+  public override async request(context: InterventionContext): Promise<InterventionRequest> {
+    await new Promise((resolve) => setTimeout(resolve, this.waitMs));
+    return super.request(context);
+  }
 }
 
 class SequenceClient implements LLMClient {
@@ -280,6 +295,62 @@ describe("runDiscovery", () => {
     // The model clicked nothing: only the entry navigation was executed.
     expect(surface.actions.map((action) => action.kind)).toEqual(["navigate"]);
     expect(coordinator.requests).toHaveLength(1);
+  });
+
+  it.each(["Post Transfer", "Apply Hold"])("stops '%s' on a legacy submit button whose label is only its value", async (buttonName) => {
+    // MERIDIAN's real buttons are <input type="submit" value="Post Transfer">:
+    // empty name, empty text. The risk label must fall through to value, and
+    // must use || - an empty-string name short-circuits ?? and once let the
+    // model post a live transfer itself.
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const surface = new FinalActionSurface(buttonName, true);
+    const coordinator = new FakeCoordinator();
+    const result = await runDiscovery({
+      goal: "Complete the posting",
+      target: "http://localhost:4478/desk",
+      surface,
+      policy: new PolicyEngine(config),
+      llm: new SequenceClient([
+        { kind: "click", ref: "final", reasoning: "Post it." },
+        { kind: "note_output", ref: "final", name: "confirmation", reasoning: "Record the confirmation." },
+        { kind: "finish", reasoning: "Done." }
+      ]),
+      logger: new RunLogger(`disc_legacy_${buttonName.replace(/\W+/g, "_")}`, root),
+      irreversibleActions: ["Post Transfer", "Apply Hold"],
+      handoff: coordinator
+    });
+    expect(result.status).toBe("success");
+    expect(result.steps.find((step) => step.execution === "human_required")).toBeDefined();
+    expect(surface.actions.map((action) => action.kind)).toEqual(["navigate"]);
+    expect(coordinator.requests).toHaveLength(1);
+  });
+
+  it("excludes human-pause time from the wall-clock duration budget", async () => {
+    // An operator taking longer than max_duration_ms at an irreversible
+    // boundary is the system working as designed. Before this fix the run
+    // resumed and immediately failed "exceeded max_duration_ms" - which is
+    // exactly what killed the first live transfer recording.
+    const root = await mkdtemp(path.join(os.tmpdir(), "corepoint-agent-"));
+    temporaryDirectories.push(root);
+    const surface = new FinalActionSurface("Post Transfer", true);
+    const coordinator = new SlowCoordinator(120);
+    const result = await runDiscovery({
+      goal: "Complete the posting",
+      target: "http://localhost:4478/desk",
+      surface,
+      policy: new PolicyEngine({ ...config, max_duration_ms: 50 }),
+      llm: new SequenceClient([
+        { kind: "click", ref: "final", reasoning: "Post it." },
+        { kind: "note_output", ref: "final", name: "confirmation", reasoning: "Record the confirmation." },
+        { kind: "finish", reasoning: "Done." }
+      ]),
+      logger: new RunLogger("disc_pausebudget", root),
+      irreversibleActions: ["Post Transfer"],
+      handoff: coordinator
+    });
+    expect(result.status).toBe("success");
+    expect(result.steps.find((step) => step.execution === "human_required")).toBeDefined();
   });
 
   it("pauses a stuck discovery into human handoff and resumes the loop", async () => {

@@ -82,6 +82,10 @@ export async function runDiscovery(options: {
   let duplicateOutputMarks = 0;
   let consecutiveActionFailures = 0;
   const startedAt = Date.now();
+  // Time spent paused for a human never counts against the run's wall-clock
+  // budget: an operator taking minutes at an irreversible boundary is the
+  // system working as designed, not a runaway discovery.
+  let pausedMs = 0;
 
   // Start evidence collection and mark identifier-like values from the goal so
   // the final retrospective redaction pass can remove them from every file.
@@ -101,7 +105,7 @@ export async function runDiscovery(options: {
   // Policy limits both step count and wall-clock time so discovery cannot run
   // indefinitely or consume unbounded model/browser resources.
   for (let step = 1; step <= policy.config.max_steps; step += 1) {
-    if (Date.now() - startedAt > policy.config.max_duration_ms) return finish("failure", "Discovery exceeded max_duration_ms.");
+    if (Date.now() - startedAt - pausedMs > policy.config.max_duration_ms) return finish("failure", "Discovery exceeded max_duration_ms.");
 
     // Surface creates a semantic page digest, temporary refs, and state hash.
     // A screenshot may be retained as evidence but is never sent to the model.
@@ -185,7 +189,11 @@ export async function runDiscovery(options: {
     if (!action) return finish("failure", "Unsupported model decision.");
     const targetElement = "ref" in action ? observation.elements.find((element) => element.ref === action.ref) : undefined;
     if ("ref" in action && !targetElement) return finish("failure", `Model selected stale or unknown ref ${action.ref}.`);
-    const risk = inferRisk(action, targetElement?.name ?? targetElement?.text ?? "", options.irreversibleActions ?? []);
+    // First NON-EMPTY of name/text/value: ?? does not fall through on an empty
+    // name, and a legacy submit button carries its label in value - "" here
+    // once let the model click Post Transfer itself.
+    const riskLabel = targetElement?.name || targetElement?.text || targetElement?.value || "";
+    const risk = inferRisk(action, riskLabel, options.irreversibleActions ?? []);
     const verdict = policy.check(action, { risk, allowMutations: options.allowMutations, targetName: targetElement?.name });
     await logger.event({ type: "policy_check", step, verdict });
     if (!verdict.allowed) {
@@ -241,6 +249,7 @@ export async function runDiscovery(options: {
   async function humanUnblocked(step: number, observation: Observation, reason: string, requestedAction: string): Promise<boolean> {
     const handoff = options.handoff;
     if (!handoff) return false;
+    const pauseStartedAt = Date.now();
     const request = await handoff.request({
       runId: logger.runId,
       capability: "discovery",
@@ -257,6 +266,9 @@ export async function runDiscovery(options: {
     // lets finish() persist evidence and complete redaction instead of throwing.
     if (request.status === "aborted") return false;
     await handoff.resume();
+    // Credit back the entire wait so a long, legitimate human pause does not
+    // then trip the duration guard the moment the agent resumes.
+    pausedMs += Date.now() - pauseStartedAt;
     hashVisits.clear();
     duplicateOutputMarks = 0;
     history.push({ decision: "handoff", result: "A human operator resolved the blocker in the live session; re-observe before deciding." });

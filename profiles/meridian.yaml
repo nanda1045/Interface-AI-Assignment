@@ -48,7 +48,10 @@ detectors:
       - "An unexpected error occurred while processing your request"
   escalation:
     patterns:
-      - "SUPERVISOR OVERRIDE REQUIRED"
+      # The hold FORM carries a permanent "RESTRICTED FUNCTION - SUPERVISOR
+      # OVERRIDE REQUIRED" banner; only the standalone wall heading or the
+      # wall's own sentence means the app is actually demanding a supervisor.
+      - "(?<!RESTRICTED FUNCTION - )SUPERVISOR OVERRIDE REQUIRED"
       - "A supervisor must sign on to complete this request"
 outcome_templates:
   # Order matters: the engine takes the first matching outcome, and the

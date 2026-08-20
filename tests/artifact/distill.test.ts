@@ -202,6 +202,18 @@ describe("distillDiscovery", () => {
     expect(JSON.stringify(artifact)).not.toContain("WEST-014");
   });
 
+  it("refuses a constant select whose value embeds run-specific data", () => {
+    // MERIDIAN's transfer options are "103001-S0001" - member number included.
+    // Unbound, that value is not a flow constant; it is this run's data.
+    expect(() => distillDiscovery(
+      runSteps(
+        step({ kind: "type", ref: "e1", text: "4521", sensitive: true }),
+        step({ kind: "select", ref: "e2", value: "4521-S0001" })
+      ),
+      options
+    )).toThrow(/run-specific data/);
+  });
+
   it("records a select that binds no parameter as the flow's own constant", () => {
     // "Search by Last Name" is a fixed choice, not invocation data. Typed text
     // gets no such fallback - unbound free text stays a loud error.

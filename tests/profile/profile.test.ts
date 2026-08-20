@@ -96,12 +96,15 @@ describe("meridian detector signatures", () => {
       .toMatchObject({ class: "app_error" });
   });
 
-  it("routes the supervisor wall to escalation", async () => {
+  it("routes the supervisor wall to escalation, but not the hold form's static banner", async () => {
     const meridian = await loadProfile("profiles/meridian.yaml");
     // MERIDIAN phrases the wall two ways; the second exists only in its profile.
     expect(detectEscalation(observing("SUPERVISOR OVERRIDE REQUIRED"), meridian.detectors)).toBeDefined();
     expect(detectEscalation(observing("A supervisor must sign on to complete this request."), meridian.detectors)).toBeDefined();
     expect(detectEscalation(observing("A supervisor must sign on to complete this request."))).toBeUndefined();
+    // The PLACE ACCOUNT HOLD form always shows this banner. Escalating on it
+    // would pause every hold replay at every step, not just at the real wall.
+    expect(detectEscalation(observing("RESTRICTED FUNCTION - SUPERVISOR OVERRIDE REQUIRED"), meridian.detectors)).toBeUndefined();
   });
 
   it("keeps the unknown-dialog rule regardless of profile", async () => {
