@@ -92,9 +92,17 @@ endpoint.
 - **Redaction of regulated data.** Member names, numbers, share ids, balances, and confirmation numbers
   are `«redacted»` in all persisted evidence; real values go only to the authorized caller. Sensitivity
   **propagates**: a value typed sensitively, or one that *embeds* a sensitive value (a share id
-  carrying a member number), is redacted too. Discovery stops capturing screenshots once a sensitive
-  value is on screen and records that it did. An automated secret scan fails the build if any artifact
+  carrying a member number), is redacted too. An automated secret scan fails the build if any artifact
   ever carries member data.
+- **Screenshots — data minimization with a retention policy.** Pixels can't be redacted, so by default
+  a run touching member data captures **no** screenshots and the dashboard shows a "withheld" notice.
+  Because screenshots are genuinely useful for a human debugging a live legacy UI, there's an opt-in
+  debug mode (`serve --capture-screenshots`) that captures full per-step screenshots — but they live
+  **only** locally under `runs/` (git-ignored, never committed), are shown only on the loopback
+  dashboard (the operator is authorized to see real data, as with live outputs), and are **auto-deleted
+  after 24h** by a retention sweep. The permanent, shareable `evidence/` is always redacted with no
+  screenshots. This is the debuggability-vs-data-minimization trade-off handled the way a regulated
+  system would: keep it briefly, access-gated, then delete.
 - **Allowlist / no easier path.** CLI, API, and chatbot all execute through the *one* runner. The API
   resolves only approved capabilities, rejects malformed requests before launch, gates mutations behind
   an envelope confirmation, refuses irreversible work unless explicitly attended, contains evidence

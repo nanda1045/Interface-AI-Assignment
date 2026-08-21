@@ -45,6 +45,10 @@ export interface CapabilityRunOptions {
    *  ?inject= mechanism. Trusted runner code applies it to the entry URL only;
    *  it must be a kind the app profile allow-lists. Recorded in evidence. */
   faultInjection?: string;
+  /** Debug-only: capture per-step screenshots for a human to review on the
+   *  loopback dashboard, even for a sensitive run. Stored locally under runs/,
+   *  never committed, swept on a retention schedule. */
+  captureScreenshots?: boolean;
   /** Observability hooks for a service wrapping this runner. Kept as callbacks
    *  so the runner itself stays free of any server or queue concern. */
   onStarted?: (detail: { reference: string }) => void;
@@ -143,6 +147,7 @@ export async function runCapability(options: CapabilityRunOptions): Promise<Capa
       logger, confirmMutations: options.confirmMutations ?? false,
       ...(profile ? { signatures: profile.detectors, irreversibleActions: profile.irreversible_actions ?? [] } : {}),
       ...(options.faultInjection ? { faultInjection: options.faultInjection } : {}),
+      ...(options.captureScreenshots ? { captureScreenshots: true } : {}),
       ...(controller ? { handoff: controller } : {})
     });
     return { result, runId: options.runId, reference: resolved.reference };

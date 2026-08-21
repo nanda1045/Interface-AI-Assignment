@@ -30,6 +30,12 @@ export interface ReplayOptions {
    *  ?inject= mechanism. It is one-shot: a restart_capability recovery re-enters
    *  with the clean entry, so a transient interstitial cannot re-trigger forever. */
   faultInjection?: string;
+  /** Debug-only: capture per-step screenshots even for a sensitive run. These
+   *  are full-fidelity (unredactable pixels) and are meant for a human to debug
+   *  from the loopback dashboard - kept locally under runs/ (git-ignored), never
+   *  committed, and swept on a retention schedule. Off by default; a sensitive
+   *  run then captures nothing and records that screenshots were withheld. */
+  captureScreenshots?: boolean;
 }
 
 // Append the demo ?inject= parameter to a URL. Used for the first entry only.
@@ -223,7 +229,9 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   // A run touching a sensitive value captures no screenshots (they would show it
   // and cannot be redacted). Record that so the dashboard explains the absence
   // rather than looking like evidence went missing.
-  if (sensitiveRun) await logger.event({ type: "screenshots_withheld", reason: "This run handles a sensitive value, so screenshots were not captured." });
+  // Withheld only when we are NOT in debug capture mode; otherwise we do capture
+  // (locally, for a human to debug) and there is nothing to explain.
+  if (sensitiveRun && !options.captureScreenshots) await logger.event({ type: "screenshots_withheld", reason: "This run handles a sensitive value, so screenshots were not captured." });
 
   // Reject invalid input, unapproved mutation, and unattended irreversible work
   // before the browser performs the capability.
@@ -407,6 +415,15 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
         return fail("postcondition_failed", JSON.stringify(step.postconditions), `Postcondition did not match at ${observation.url}.`);
       }
       await logger.event({ type: "step_completed", step: index + 1, stepId: step.id, durationMs: Date.now() - stepStartedAt });
+      // Debug capture: a per-step screenshot of the settled screen, saved locally
+      // for a human to debug from the dashboard. Never on the default path.
+      if (options.captureScreenshots) {
+        const shot = (await surface.observe({ screenshot: true })).screenshot;
+        if (shot) {
+          const saved = await logger.screenshot(index + 1, shot);
+          await logger.event({ type: "observation", step: index + 1, url: observation.url, title: observation.title, stateHash: observation.stateHash, elementCount: observation.elements.length, screenshot: saved });
+        }
+      }
     }
   }
   // Every step completed without a restart request; leave the restart loop.
@@ -557,7 +574,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     const handoff = options.handoff;
     if (!handoff) return "failed";
     let screenshot: string | undefined;
-    if (!sensitiveRun) screenshot = (await surface.observe({ screenshot: true })).screenshot;
+    if (!sensitiveRun || options.captureScreenshots) screenshot = (await surface.observe({ screenshot: true })).screenshot;
     const request = await handoff.request({
       runId: logger.runId,
       capability: `${artifact.capability.id}@${artifact.capability.version}`,
@@ -594,7 +611,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   // capture is defensive so even a dead browser still produces result.json.
   async function fail(failureClass: FailureClass, expected: string, observed: string): Promise<ReplayResult> {
     let observation: Observation | undefined;
-    try { observation = await surface.observe({ screenshot: !sensitiveRun }); } catch { observation = undefined; }
+    try { observation = await surface.observe({ screenshot: !sensitiveRun || Boolean(options.captureScreenshots) }); } catch { observation = undefined; }
     let dom = "DOM snapshot unavailable: the browser session was no longer reachable.";
     try { dom = await surface.snapshotDom(); } catch { /* Browser may already be unreachable; keep the fallback text. */ }
     const bundle = await logger.failureBundle({ screenshot: observation?.screenshot, dom, ...(lastAttempts ? { attempts: lastAttempts } : {}) });

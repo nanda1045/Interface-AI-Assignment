@@ -19,6 +19,7 @@ import { installHumanRecorder } from "./control/human-recorder.js";
 import { mutationById, uiMutations } from "./eval/mutations.js";
 import { formatStressReport, scoreStress, type StressRow } from "./eval/stress.js";
 import { createRunId, RunLogger } from "./evidence/run-logger.js";
+import { sweepScreenshots, SCREENSHOT_RETENTION_MS } from "./evidence/retention.js";
 import { chat } from "./chat/chat.js";
 import { PolicyEngine } from "./policy/engine.js";
 import { signOn } from "./profile/bootstrap.js";
@@ -336,19 +337,28 @@ program.command("serve")
   .option("--policy <path>", "policy YAML", "policies/default.yaml")
   .option("--auth <credentials>", "default credential set for runs that need a session (e.g. teller, supervisor)")
   .option("--demo", "enable demo affordances such as fault injection", false)
-  .action(async (raw: { port: string; artifactRoot: string; runRoot: string; policy: string; auth?: string; demo: boolean }) => {
+  .option("--capture-screenshots", "debug: capture per-step screenshots locally (never committed; auto-deleted after 24h)", false)
+  .action(async (raw: { port: string; artifactRoot: string; runRoot: string; policy: string; auth?: string; demo: boolean; captureScreenshots: boolean }) => {
     const store = new ArtifactStore(raw.artifactRoot);
     const runs = new RunService(raw.runRoot);
     const interventions = new Map<string, RunController>();
+    // Data-minimization for debug screenshots: sweep any older than the retention
+    // window on startup, then hourly, so the images never linger. They only ever
+    // live under runs/ (git-ignored) and are shown only on the loopback dashboard.
+    if (raw.captureScreenshots) {
+      const sweep = async () => { const removed = await sweepScreenshots(raw.runRoot, SCREENSHOT_RETENTION_MS); if (removed) console.error(`Retention sweep removed ${removed} expired screenshot(s).`); };
+      await sweep();
+      setInterval(() => { void sweep(); }, 60 * 60 * 1000).unref();
+    }
     const { server } = await startApiServer({
       store, runs, runRoot: raw.runRoot, demoMode: raw.demo, interventions,
       // The API runs headless replays through the shared runner; attended runs
       // register their controller in the shared registry the dashboard serves.
       // A per-request auth wins; otherwise the server's default signs the run on.
-      execute: (options) => runCapability({ ...options, policy: raw.policy, ...(options.auth ?? raw.auth ? { auth: options.auth ?? raw.auth } : {}), onController: (controller) => interventions.set(options.runId, controller), startConsole: false }),
+      execute: (options) => runCapability({ ...options, policy: raw.policy, ...(options.auth ?? raw.auth ? { auth: options.auth ?? raw.auth } : {}), ...(raw.captureScreenshots ? { captureScreenshots: true } : {}), onController: (controller) => interventions.set(options.runId, controller), startConsole: false }),
       ...(process.env.OPENAI_API_KEY ? { chatApiKey: process.env.OPENAI_API_KEY } : {})
     }, Number(raw.port));
-    console.error(`Dashboard and API on http://127.0.0.1:${raw.port}${raw.demo ? " (demo mode)" : ""}`);
+    console.error(`Dashboard and API on http://127.0.0.1:${raw.port}${raw.demo ? " (demo mode)" : ""}${raw.captureScreenshots ? " (debug screenshots on, 24h retention)" : ""}`);
     await new Promise<void>((resolve) => server.on("close", resolve));
   });
 

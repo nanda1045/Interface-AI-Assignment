@@ -84,6 +84,13 @@ npm run serve:meridian     # = serve --auth teller --demo
 The dashboard shows the approved catalog, live and past run history (discovery, approval, and replay),
 per-run detail with step timings and redacted evidence, the intervention queue, and a chat panel.
 
+By default, screenshots are **withheld** from any run touching member data (you can't redact pixels),
+and the dashboard says so. For local debugging you can opt in with
+`serve --auth teller --demo --capture-screenshots`: full per-step screenshots are then captured, shown
+on the loopback dashboard (the operator is authorized), stored **only** under `runs/` (git-ignored,
+never committed), and **auto-deleted after 24h** by a retention sweep. The committed `evidence/` stays
+redacted with no screenshots either way.
+
 **2. Try the chatbot** (in the dashboard chat box, or via `POST /api/chat`). Each shows a different
 part of the safety model:
 
