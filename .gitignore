@@ -3,6 +3,7 @@ dist/
 coverage/
 .env
 /runs/
+/eval/report.json
 playwright-report/
 test-results/
 *.log
