@@ -210,3 +210,29 @@ This is the drift-monitoring story made real: the capability breaks, the system 
 human approves it, and it is back in service — no engineer editing an artifact, no rewrite. Tests:
 [`tests/heal/`](tests/heal/) (pure patch invariants and the reach → propose → validate → draft flow,
 all offline).
+
+## 11. Beyond the brief: capability health sweep (when to heal)
+
+Healing answers *how* to repair a drifted capability; this answers *when*. One command,
+`cli eval --manifest eval/meridian.yaml`, sweeps the approved catalog against the live app and reports a
+**locator-health** verdict per capability — the production monitoring story, runnable on demand or from
+cron:
+
+- **Only read-only capabilities run.** The manifest holds safe, curated invocations for the read-only
+  capabilities; an unattended sweep **never** runs a mutating or irreversible one (it would change
+  member data), so those are reported as `skipped` and exercised through the attended path instead. No
+  expected output *values* live in the manifest — the sweep judges status and locator health, so no
+  member data enters the repo.
+- **Drift is the signal, not just pass/fail.** Every run already records which locator tier matched each
+  step. The sweep turns that into a verdict: **healthy** (every step matched its strongest locator),
+  **drifting** (still succeeds, but a step was rescued by a weaker fallback tier — heal it soon), or
+  **failed** (with the disposition that says whether a `heal` is the fix). A capability degrading toward
+  its fallbacks is the early warning *before* it breaks in front of a user.
+- **The report ends with an action, never a silent all-clear.** It aggregates counts and prints an
+  explicit work-list — which capabilities are drifting and which are broken and should be repaired with
+  `heal` — and exits non-zero when anything failed, so CI or a scheduled run can alert.
+
+Together, §10 and §11 close the loop the brief's "robustness against a real, changing legacy UI" is
+really about: **detect drift (eval) → propose a repair (heal) → a human approves it → back in service**,
+with replay staying deterministic and model-free throughout. Scoring and reporting are pure and
+offline-tested: [`tests/eval/health.test.ts`](tests/eval/health.test.ts).

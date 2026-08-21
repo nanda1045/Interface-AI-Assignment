@@ -1,0 +1,18 @@
+# Capability health sweep - safe, curated invocations for MERIDIAN CORE.
+#
+# Only READ-ONLY capabilities are exercised here. Mutating and irreversible ones
+# (open_new_share, update_member_information, transfer_funds, place_account_hold)
+# are intentionally absent: an unattended sweep must never change member data, so
+# the harness reports them as skipped rather than running them. They are exercised
+# through the attended handoff path instead.
+#
+# No expected output VALUES are stored - the sweep judges run status and locator
+# health, so no member data lives in the repo.
+auth: teller
+cases:
+  find_member_by_number:
+    member_number: "100987"
+  find_members_by_last_name:
+    last_name: "Turing"
+  get_member_record:
+    member_id: "100987"

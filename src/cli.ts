@@ -3,6 +3,7 @@
 // browser adapter, engines, policies, artifact store, evidence, and handoff.
 // Business logic stays in those modules; this file coordinates their use.
 import "dotenv/config";
+import { writeFile } from "node:fs/promises";
 import { Command } from "commander";
 import { chromium } from "playwright";
 import { runDiscovery } from "./agent/loop.js";
@@ -19,6 +20,8 @@ import { RunController } from "./control/controller.js";
 import { installHumanRecorder } from "./control/human-recorder.js";
 import { mutationById, uiMutations } from "./eval/mutations.js";
 import { formatStressReport, scoreStress, type StressRow } from "./eval/stress.js";
+import { formatHealthReport, scoreHealth, type HealthRow } from "./eval/health.js";
+import { loadEvalManifest } from "./eval/manifest.js";
 import { createRunId, RunLogger } from "./evidence/run-logger.js";
 import { sweepScreenshots, SCREENSHOT_RETENTION_MS } from "./evidence/retention.js";
 import { chat } from "./chat/chat.js";
@@ -314,6 +317,57 @@ program.command("replay")
     });
     console.log(JSON.stringify(result, null, 2));
     if (result.status === "failure") process.exitCode = 1;
+  });
+
+// EVAL: sweep the approved catalog against the live app and report locator
+// health, so drift is caught before it breaks a real run. Only read-only
+// capabilities are exercised (from a manifest of safe invocations); mutating and
+// irreversible ones are reported as skipped because an unattended sweep must
+// never change member data. The report flags what to `heal` next.
+program.command("eval")
+  .description("Replay approved read-only capabilities against the live app and report locator health, flagging drift for heal.")
+  .option("--manifest <path>", "eval manifest of safe invocations", "eval/meridian.yaml")
+  .option("--policy <path>", "policy YAML", "policies/default.yaml")
+  .option("--artifact-root <path>", "artifact directory", "artifacts")
+  .option("--auth <credentials>", "named credential set; overrides the manifest's auth")
+  .option("--headless", "run without a visible browser", false)
+  .option("--report <path>", "also write the full JSON report here")
+  .option("--run-root <path>", "run evidence directory", "runs")
+  .action(async (raw: { manifest: string; policy: string; artifactRoot: string; auth?: string; headless: boolean; report?: string; runRoot: string }) => {
+    const manifest = await loadEvalManifest(raw.manifest);
+    const auth = raw.auth ?? manifest.auth;
+    const store = new ArtifactStore(raw.artifactRoot);
+    const approved = await store.approved();
+    if (approved.length === 0) throw new Error("No approved capabilities to evaluate.");
+
+    const rows: HealthRow[] = [];
+    for (const artifact of approved.sort((left, right) => left.capability.id.localeCompare(right.capability.id))) {
+      const id = artifact.capability.id;
+      const risk = artifact.capability.risk;
+      // An unattended sweep never runs a capability that could change records.
+      if (risk !== "read_only") {
+        rows.push({ capability: id, risk, verdict: { health: "skipped", detail: `${risk} — exercised only via the attended path` } });
+        continue;
+      }
+      const params = manifest.cases[id];
+      if (!params) {
+        rows.push({ capability: id, risk, verdict: { health: "skipped", detail: "no safe invocation in the manifest" } });
+        continue;
+      }
+      const { result } = await runCapability({
+        reference: `${id}@${artifact.capability.version}`, params, policy: raw.policy, artifactRoot: raw.artifactRoot,
+        headless: raw.headless, ...(auth ? { auth } : {}), runRoot: raw.runRoot, runId: createRunId("replay")
+      });
+      rows.push({ capability: id, risk, verdict: scoreHealth(result) });
+    }
+
+    console.log(formatHealthReport(rows));
+    if (raw.report) {
+      await writeFile(raw.report, `${JSON.stringify({ generatedAt: new Date().toISOString(), rows }, null, 2)}\n`, "utf8");
+      console.error(`Report written to ${raw.report}`);
+    }
+    // A sweep that found a broken capability exits non-zero so CI/cron can alert.
+    if (rows.some((row) => row.verdict.health === "failed")) process.exitCode = 1;
   });
 
 // STRESS: replay under controlled UI mutations and require exact expected
