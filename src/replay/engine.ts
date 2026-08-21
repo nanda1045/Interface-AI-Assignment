@@ -66,7 +66,10 @@ function validateInputs(artifact: CapabilityArtifact, params: Record<string, unk
 
 // Combine a declarative saved action with current invocation parameters and the
 // fresh element ref returned by locator resolution.
-function materializeAction(step: CapabilityArtifact["steps"][number], params: Record<string, unknown>, ref?: string): AbstractAction {
+// Exported so the repair flow can walk a capability to a broken step using the
+// exact same action-materialisation the production engine uses - reaching the
+// step to heal must behave identically to a normal replay of the prior steps.
+export function materializeAction(step: CapabilityArtifact["steps"][number], params: Record<string, unknown>, ref?: string): AbstractAction {
   const action = step.action;
   switch (action.kind) {
     case "navigate": return action;
@@ -164,7 +167,9 @@ function recordTier(stats: TierStats, step: string, resolution: ResolvedElement)
 
 // Allow asynchronously rendered targets to appear within the step timeout while
 // tolerating short-lived iframe/navigation context replacement.
-async function resolveWithWait(surface: Surface, target: TargetSpec, timeoutMs: number): Promise<ResolvedElement | ResolutionFailure> {
+// Exported for the repair flow, which resolves prior steps' targets to reach a
+// broken step and validates a proposed replacement ladder the same way replay does.
+export async function resolveWithWait(surface: Surface, target: TargetSpec, timeoutMs: number): Promise<ResolvedElement | ResolutionFailure> {
   const deadline = Date.now() + timeoutMs;
   let last: ResolvedElement | ResolutionFailure = { ok: false, reason: "target_not_found", attempts: [] };
   do {

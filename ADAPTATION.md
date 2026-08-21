@@ -145,8 +145,9 @@ Following the brief's "cut depth, not capabilities":
   idempotency map so they survive a restart.
 - **No concurrent browsers, no multi-capability planning.** The chatbot routes to exactly one
   capability per turn; chaining (a single-match search → open record) is deliberately *not* automatic,
-  to stay predictable. No automatic locator healing — a locator failure is an honest
-  `fix_capability` failure with evidence, not a silent self-repair.
+  to stay predictable. **No locator healing *at replay*** — a locator failure during a production run
+  stays an honest `fix_capability` failure with evidence, never a silent mid-run self-repair. Repair is
+  a separate, human-approved offline flow (see §10).
 - **Minimal styling and no screen recording.** Effort went to correctness and safety, not polish.
 - **Chatbot fluency traded for correctness.** The model never phrases the answer, so replies always
   reflect real data — less chatty, never wrong.
@@ -179,3 +180,33 @@ Following the brief's "cut depth, not capabilities":
 
 Normal tests (`npm test`) are fully offline; live checks are opt-in (`npm run test:meridian`). Committed
 proof of each behavior is in [`evidence/meridian/`](evidence/meridian/).
+
+## 10. Beyond the brief: self-healing repair (human-approved)
+
+The longest-term risk for a record-once system against a live legacy app is not load — it is that the
+bank changes its UI and a recording silently breaks. The system turns that from a dead end into a
+one-command repair, **without weakening any guarantee**:
+
+- **Healing never runs at replay.** A drifted locator during a production run is still an honest
+  `fix_capability` failure — no model ever enters a real run's decision loop. Repair is a separate,
+  operator-initiated flow: `cli heal <capability> --step <id> --from-run <failed-run> --param …`.
+- **Scoped re-discovery.** `heal` walks the capability to the broken step **with the real engine**
+  (same resolution and action materialization as replay), then uses the model to re-discover *only that
+  one step's* element on the live page and rebuilds a durable locator ladder with the same
+  `captureLocators` discovery uses. The single model-touching seam is *which element* — everything else
+  is deterministic.
+- **Nothing unverified is written.** A proposed ladder is accepted only if it resolves to exactly one
+  visible, enabled element on the live page; otherwise `heal` writes nothing.
+- **It produces a draft, not a live change.** The output is a new **draft** version that changes *only*
+  that step's locator strategies — action, `human_required` boundary, postconditions, contracts, and
+  policy are carried over untouched and the whole document is re-validated by the strict schema. The
+  draft carries `repair` provenance (which version broke, on which run, old→new ladder).
+- **The existing approval gate still applies.** The healed draft is not runnable by name — `resolve`
+  keeps returning the approved version — until a human approves it through the ordinary `approve` path
+  (approver ≠ discoverer, must validate by replaying a *different* invocation). So the system can
+  *propose* its own repair, but a person still signs it off, and replay stays model-free.
+
+This is the drift-monitoring story made real: the capability breaks, the system proposes the fix, a
+human approves it, and it is back in service — no engineer editing an artifact, no rewrite. Tests:
+[`tests/heal/`](tests/heal/) (pure patch invariants and the reach → propose → validate → draft flow,
+all offline).

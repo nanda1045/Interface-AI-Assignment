@@ -13,6 +13,7 @@ import { distillDiscovery } from "./artifact/distill.js";
 import { buildCatalog } from "./artifact/catalog.js";
 import { ArtifactStore } from "./artifact/store.js";
 import { bumpVersion } from "./artifact/versioning.js";
+import { healCapability, type StepProposer } from "./heal/heal.js";
 import { startConsole } from "./control/console-server.js";
 import { RunController } from "./control/controller.js";
 import { installHumanRecorder } from "./control/human-recorder.js";
@@ -207,6 +208,84 @@ program.command("approve")
       id: artifact.capability.id, version: artifact.capability.version, status: artifact.capability.status,
       approvedBy: artifact.capability.provenance.approved_by, validation: artifact.capability.provenance.validation
     }, null, 2));
+  });
+
+// HEAL: repair a capability whose one step's locator ladder drifted when the
+// legacy UI changed. This is an OFFLINE, operator-initiated flow - it never runs
+// during a production replay, where a locator failure stays an honest
+// fix_capability failure. It walks the capability to the broken step with the
+// real engine, uses the model to re-discover ONLY that step's element on the
+// live page, validates the new ladder actually resolves, and writes a DRAFT the
+// ordinary human approval gate must still pass before it can run.
+function describeStrategy(strategy: { kind: string; name?: string; label?: string; value?: string }): string {
+  return `${strategy.kind}(${strategy.name ?? strategy.label ?? strategy.value ?? ""})`.replace(/\(\)$/, "");
+}
+program.command("heal")
+  .argument("<reference>", "capability@version to repair (the broken version)")
+  .requiredOption("--step <id>", "the step whose locator drifted, e.g. s4")
+  .requiredOption("--param <name=value>", "an invocation that reaches the broken step", (value, previous: string[] = []) => [...previous, value])
+  .requiredOption("--from-run <id>", "the failed replay run that motivated this repair")
+  .option("--provider <provider>", "openai or anthropic", "openai")
+  .option("--policy <path>", "policy YAML", "policies/default.yaml")
+  .option("--artifact-root <path>", "artifact directory", "artifacts")
+  .option("--auth <credentials>", "named credential set from the app profile; performs a real sign-on")
+  .option("--headless", "run without a visible browser (healing is easier to watch headed)", false)
+  .option("--run-root <path>", "run evidence directory", "runs")
+  .action(async (reference: string, raw: { step: string; param: string[]; fromRun: string; provider: string; policy: string; artifactRoot: string; auth?: string; headless: boolean; runRoot: string }) => {
+    if (raw.provider !== "openai" && raw.provider !== "anthropic") throw new Error("--provider must be openai or anthropic.");
+    const store = new ArtifactStore(raw.artifactRoot);
+    // Load the exact version being repaired - an exact reference resolves whatever
+    // its status, so a broken capability can always be named for healing.
+    const artifact = await store.load(reference, { includeDrafts: true });
+    const target = new URL(artifact.entry.url);
+    const profile = await profileForOrigin(target.origin);
+    const policyPath = raw.policy === "policies/default.yaml" && profile ? profile.policy : raw.policy;
+    const policy = await PolicyEngine.fromFile(policyPath);
+    const browser = await chromium.launch({ headless: raw.headless });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const logger = new RunLogger(createRunId("heal"), raw.runRoot);
+    const surface = new WebSurface(page, { browser, context });
+    const llm = chooseClient(raw.provider);
+    try {
+      if (raw.auth) {
+        if (!profile) throw new Error(`--auth needs an app profile for ${target.origin}, and none was found in profiles/.`);
+        await logger.initialize();
+        await signOn({ surface, policy, logger, profile, credentials: resolveCredentials(profile, raw.auth) });
+      }
+      // The only LLM-touching seam: identify the element this step acts on, then
+      // rebuild a durable ladder from the LIVE page exactly as discovery does.
+      const proposer: StepProposer = async ({ observation, step }) => {
+        const { decision } = await llm.decide({
+          system: "You are repairing ONE step of a recorded UI automation whose saved locator stopped matching. From the listed elements, identify the single element this step operates on and click it. Do not navigate or invent elements.",
+          goal: `Identify the element for this step: ${step.intent}`,
+          observation,
+          history: [],
+          markedOutputs: []
+        });
+        const ref = "ref" in decision ? decision.ref : undefined;
+        if (!ref) throw new Error(`The model did not identify an element for ${step.id} (it returned ${decision.kind}).`);
+        return (await surface.captureLocators(ref)).strategies;
+      };
+      const previous = await store.latestVersion(artifact.capability.id) ?? artifact.capability.version;
+      const newVersion = bumpVersion(previous, "minor");
+      const { patched, before, after } = await healCapability({
+        artifact, params: parseAssignments(raw.param), stepId: raw.step,
+        surface, policy, proposer, newVersion, fromRun: raw.fromRun, model: llm.model
+      });
+      const artifactPath = await store.save(patched);
+      console.log(JSON.stringify({
+        healed: `${patched.capability.id}@${patched.capability.version}`,
+        status: patched.capability.status,
+        step: raw.step,
+        ladder_before: before.map(describeStrategy),
+        ladder_after: after.map(describeStrategy),
+        draft: artifactPath,
+        approve_with: `cli approve ${patched.capability.id}@${patched.capability.version} --by <reviewer> --param <name=value> --auth ${raw.auth ?? "<credentials>"}`
+      }, null, 2));
+    } finally {
+      await surface.close();
+    }
   });
 
 // REPLAY: run a saved capability with no LLM. A technical failure receives a

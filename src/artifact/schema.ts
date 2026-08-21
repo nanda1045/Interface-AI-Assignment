@@ -138,6 +138,19 @@ export const capabilityArtifactSchema = strict({
         outcome: z.literal("success"),
         reused_params: z.array(z.string()),
         matched_tiers: z.record(z.string(), z.number())
+      }).nullable().optional(),
+      // Present only on a draft produced by the self-healing repair flow: it
+      // records which prior version broke, on which run, which step's locator
+      // ladder was re-discovered, and how the ladder changed. The draft still
+      // has to pass the ordinary human approval gate before it can be run - this
+      // block is provenance a reviewer reads, never an authorisation.
+      repair: strict({
+        from_version: z.string().regex(/^\d+\.\d+\.\d+$/),
+        from_run: z.string(),
+        step: z.string().regex(/^s\d+$/),
+        strategies_before: z.number().int().nonnegative(),
+        strategies_after: z.number().int().positive(),
+        repaired_at: z.string().datetime()
       }).nullable().optional()
     })
   }),

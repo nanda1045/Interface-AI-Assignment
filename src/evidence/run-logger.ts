@@ -126,7 +126,7 @@ export class RunLogger {
 // millisecond, so rapid API runs never collide onto one evidence directory.
 let runIdCounter = 0;
 
-export function createRunId(prefix: "disc" | "replay" | "approval", now = new Date()): string {
+export function createRunId(prefix: "disc" | "replay" | "approval" | "heal", now = new Date()): string {
   // Keep milliseconds (drop only the separators) and append a short counter, so
   // two runs enqueued in the same second get distinct ids and directories.
   const stamp = now.toISOString().replace(/[-:.]/g, "");
