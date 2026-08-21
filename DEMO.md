@@ -132,9 +132,18 @@ curl -s http://127.0.0.1:4599/api/runs -H 'content-type: application/json' \
 > **Say (a Chromium window opens):** "`attended:true` is me acknowledging I'm here to complete it. The
 > machine fills the form, reaches Post Transfer, and stops."
 
+> **Heads up (macOS):** the headed Chromium window opens **in the background ~20–30s after the POST** —
+> it signs on and fills the form first, and it does **not** grab focus. If you don't see it, **Cmd+Tab to
+> "Chromium"** or click it in the Dock (Mission Control also works). The dashboard is your signal: the run
+> goes **running → "Escalated — waiting for human"** exactly when the window is ready at Post Transfer.
+
 On the **dashboard**: the run flips to **"Escalated — waiting for human"** → **Interventions** panel →
 **Take control** → in the **Chromium window** click **Post Transfer** → back on the dashboard **Hand back**
 → click the finished run for the confirmation + redacted evidence.
+
+> **One at a time:** the runner is single-worker, so an attended run holds the queue until you complete it
+> (Post Transfer → Hand back) or free it (Hand back without clicking, or let the intervention time out).
+> Resolve one before starting another, or the next POST just sits **queued** with no window.
 
 > **Say:** "The machine did everything up to the irreversible click — it *physically cannot* do that
 > click; the format won't even save an irreversible capability the machine could finish alone. A person
@@ -194,7 +203,7 @@ npm run cli -- replay find_member_by_number@1.0.0 --param member_number=100987 -
 npm run cli -- heal find_member_by_number@1.0.0 --step s3 --from-run <run-id> --param member_number=100987 --auth teller
 ```
 
-> **Say (a browser opens):** "heal walks to the broken step with the real engine, uses the model to
+> **Say (a browser opens in the background — Cmd+Tab if you don't see it):** "heal walks to the broken step with the real engine, uses the model to
 > re-discover **only the Search button** on the live page, validates the new locator actually resolves,
 > and writes a **draft** — 1.1.0. Here's the `ladder_before → ladder_after` diff. It's a *draft*: not
 > runnable yet." *(If the dashboard is open, the draft also appears under **Proposed repairs**.)*
@@ -295,8 +304,12 @@ cat evidence/meridian/README.md   # committed proof of every behaviour
 
 The whole story is provable without the live host.
 
-## Two things to get right on the day
+## A few things to get right on the day
 
+- **The headed browser (steps 6 and 7e) opens in the background on macOS** and takes ~20–30s to appear —
+  Cmd+Tab to "Chromium" if you don't see it, and use the dashboard's "waiting for human" state as the cue.
+- **One attended run at a time** — the runner is single-worker; complete or free a paused run before
+  starting another, or the next one sits queued with no window.
 - **Chat:** wait for the reply before pointing at the dashboard — the run finishes as the reply lands.
 - **Step 6:** re-run 6a right before 6b — the shared host puts shares on hold as you use them.
 - **Step 7:** always run the restore in 7h so the repo is left clean.
