@@ -4,8 +4,9 @@
 > It is the adaptation write-up, organized to the evaluation criteria (adaptation quality, the core
 > loop, robustness, the task contract, safety, escalation, trade-offs). To drive it:
 > `npm run serve:meridian` → `http://127.0.0.1:4599`, or jump to the
-> [MERIDIAN adaptation demo](#meridian-adaptation-demo) below. Same-day proof is in
-> [`evidence/meridian/`](evidence/meridian/).
+> [MERIDIAN adaptation demo](#meridian-adaptation-demo) below. For a step-by-step, top-to-bottom demo
+> script with the exact command and what to show at each step, see **[`DEMO.md`](DEMO.md)**. Same-day
+> proof is in [`evidence/meridian/`](evidence/meridian/).
 >
 > The rest of this README documents the **base** CorePoint system the adaptation builds on.
 
