@@ -220,6 +220,10 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
   // event is redacted like every other. Gives the dashboard a clean inputs
   // block; sensitive ones show as «redacted», the rest as given.
   await logger.event({ type: "run_inputs", inputs: params });
+  // A run touching a sensitive value captures no screenshots (they would show it
+  // and cannot be redacted). Record that so the dashboard explains the absence
+  // rather than looking like evidence went missing.
+  if (sensitiveRun) await logger.event({ type: "screenshots_withheld", reason: "This run handles a sensitive value, so screenshots were not captured." });
 
   // Reject invalid input, unapproved mutation, and unattended irreversible work
   // before the browser performs the capability.
