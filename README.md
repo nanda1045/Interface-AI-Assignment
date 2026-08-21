@@ -125,6 +125,50 @@ Fault injection (demo mode only) forces a MERIDIAN `?inject=` condition on the e
 `POST /api/runs` with `"fault_injection": "maintenance"` (bounded recovery) or `"server"` (a
 structured technical failure). Valid kinds come from the profile's allow-list.
 
+## Detecting drift and self-healing a capability
+
+The longest-term risk for a record-once system against a live app is the UI changing and a recording
+silently breaking. Two commands close that loop — **detect drift → propose a repair → a human approves →
+back in service** — without a model ever entering a real run. Both are written up in
+[`ADAPTATION.md`](ADAPTATION.md) §10–11.
+
+**`eval` — the health sweep (find drift before a user does).** It replays the approved **read-only**
+capabilities against the live app and reports a health verdict on two axes: *locator* health (did each
+step match its strongest locator, or fall back to a weaker one) and *data-shape* health (does the results
+table still have the columns the recording expects). It exits non-zero when anything failed, so it can
+run on a schedule.
+
+```bash
+npm run cli -- eval --manifest eval/meridian.yaml --headless
+```
+
+Only read-only capabilities run, from a manifest of safe invocations; mutating and irreversible ones are
+reported as **skipped**, because an unattended sweep must never change member data. No expected output
+*values* live in the manifest — the sweep judges run status and locator/shape health, so no member data
+enters the repo.
+
+**`heal` — repair a drifted step, human-approved.** When a step's locator breaks, `heal` walks the
+capability to that step with the real replay engine, uses the model to re-discover *only that one element*
+on the live page, validates the new locator actually resolves, and writes a **draft** new version with
+just that step changed. Healing never runs during a normal replay (a drifted locator there stays an
+honest `fix_capability` failure — no silent self-repair mid-run), and the draft is not runnable until it
+passes the ordinary `approve` gate.
+
+```bash
+# after a replay failed with fix_capability, repair the drifted step (needs OPENAI_API_KEY):
+npm run cli -- heal find_member_by_number@1.0.0 \
+  --step s3 --from-run <failed-run-id> \
+  --param member_number=100987 --auth teller
+
+# it prints the ladder_before -> ladder_after diff and writes a draft; approve it
+# through the same gate as any capability (a different reviewer, a different member):
+npm run cli -- approve find_member_by_number@1.1.0 \
+  --by "reviewer@example.test" --param member_number=101555 --auth teller
+```
+
+The healed draft also appears on the dashboard under **Proposed repairs — awaiting approval**. `heal`
+needs `OPENAI_API_KEY` (it re-discovers via the model); `eval` and `approve` are model-free.
+
 ## Live LLM discovery
 
 The following creates a separate manual artifact in `/tmp`, leaving the reviewed repository artifact unchanged. Omit `--headless` to watch Claude operate the UI.
@@ -323,7 +367,8 @@ acceptance tests.
 - `src/api/`: the loopback API (runs, evidence, chat, interventions) and its request schemas
 - `src/chat/`: the chatbot — model router, deterministic formatter, and orchestration
 - `src/dashboard/`: the operator dashboard page
-- `src/eval/`: injected UI mutations and the scoring behind `stress`
+- `src/eval/`: injected UI mutations (`stress`) and the capability health sweep (`eval` — locator- and data-shape-drift scoring)
+- `src/heal/`: offline, human-approved locator repair (`heal` — the pure patch and the reach/propose/validate flow)
 - `apps/corepoint/`: fictional hostile target and deterministic chaos injection
 - `profiles/`: `meridian.yaml` (live target) and `corepoint.yaml` (pinned to engine defaults)
 - `artifacts/`: reviewed capability contracts (CorePoint and MERIDIAN) and Tenant B overlay

@@ -218,3 +218,52 @@ tests the rungs the ladder actually falls through to.
 5. **Either enforce `confidence` and `ui_version_range` or delete them.** Both are
    still declared and read by nothing — the same shape of mistake as everything
    above.
+
+---
+
+## Expansion round — building the drift→repair loop
+
+Asked to expand the project, I built the next two items on the list above, because
+they are the same idea from two directions: **the telemetry the system records
+about how it finds an element is only worth recording if something acts on it.**
+Item 2 (aggregate telemetry to detect drift) becomes a *signal*; item 1 (act on
+locator quality) becomes a *repair*. Together they close a loop the base system
+left open: **detect drift → propose a repair → a human approves → back in
+service** — with no model ever entering a real run's decision path.
+
+### `eval` — drift is now measured across the catalog, not read from two directories
+
+The base system recorded which locator tier matched each step and then compared
+nothing. `eval` replays the approved read-only capabilities against the live app
+and turns that telemetry into a health verdict: **healthy** (every step matched its
+strongest locator), **drifting** (still succeeds, but a step fell to a weaker
+fallback — the early warning), or **failed**. The report ends with an explicit
+heal work-list and exits non-zero, so a schedule can call it.
+
+It also grew a second, orthogonal signal the base design had no answer for:
+**data-shape drift.** A capability can match every locator perfectly and still be
+slipping because the app renamed or added a results column. The sweep captures the
+live table headers (labels only — never cell values) and compares them to the
+recorded columns. Only read-only capabilities run, from a manifest of safe
+invocations; mutating and irreversible ones are reported skipped, because an
+unattended sweep must never change member data.
+
+*`2a5d4a4`, `c5fe3d3`*
+
+### `heal` — the recording repairs itself, but only a human makes it live
+
+When a step's locator drifts, `heal` walks the capability to that step with the
+real replay engine, uses the model to re-discover *only that one element* on the
+live page, validates the new ladder actually resolves, and writes a **draft** that
+changes just that step. The invariant that keeps it honest: **healing never runs
+during replay.** A drifted locator in a real run stays a `fix_capability` failure;
+`heal` is a separate, operator-initiated step whose only output is a draft that
+still has to pass the existing approval gate (approver ≠ discoverer, a different
+invocation). The system proposes its own fix; a person signs it off; replay stays
+model-free. Healed drafts surface on the dashboard under **Proposed repairs**.
+
+This is the first thing that consumes the drift signal `eval` produces and the
+approval gate `approve` enforces — the two mechanisms the base round built and left
+standing next to each other, now wired together.
+
+*`df8e5bb`, `b64e1bc`, `f389547`*
