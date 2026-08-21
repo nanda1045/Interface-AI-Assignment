@@ -216,6 +216,10 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     model: "deterministic-replay",
     capability: `${artifact.capability.id}@${artifact.capability.version}`
   });
+  // The invocation inputs, logged AFTER sensitive values are registered so the
+  // event is redacted like every other. Gives the dashboard a clean inputs
+  // block; sensitive ones show as «redacted», the rest as given.
+  await logger.event({ type: "run_inputs", inputs: params });
 
   // Reject invalid input, unapproved mutation, and unattended irreversible work
   // before the browser performs the capability.

@@ -8,6 +8,9 @@ export type RunEvent =
   // capability without a version, so the evidence has to record which one
   // resolution actually selected rather than what was asked for.
   | { type: "run_started"; goal: string; target: string; model: string; capability?: string }
+  // The run's invocation inputs (redacted), so the dashboard can show what was
+  // requested alongside the structured result.
+  | { type: "run_inputs"; inputs: Record<string, unknown> }
   | { type: "observation"; step: number; url: string; title: string; stateHash: string; elementCount: number; screenshot?: string }
   | { type: "decision"; step: number; reasoning: string; decision: string }
   | { type: "policy_check"; step: number; verdict: PolicyVerdict }

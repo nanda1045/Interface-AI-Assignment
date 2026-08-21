@@ -102,6 +102,8 @@ async function renderDetail(id){
   const timings=events.filter(e=>e.type==='step_completed').map(e=>\`step \${e.step} (\${esc(e.stepId)}): \${e.durationMs} ms\`);
   const withheld=events.some(e=>e.type==='screenshots_withheld');
   const notable=events.filter(e=>['policy_check','action','detector_hit','recovery_applied','intervention_requested','human_step_recorded','fault_injected','step_completed','screenshots_withheld','result'].includes(e.type));
+  const inputsEvent=events.find(e=>e.type==='run_inputs');
+  const inputs=inputsEvent?\`<h2>Inputs</h2><pre>\${esc(JSON.stringify(inputsEvent.inputs,null,2))}</pre>\`:'';
   let outcome='';
   if(res.status==='success') outcome=\`<h2>Outputs</h2><pre>\${esc(JSON.stringify(res.outputs,null,2))}</pre>\`;
   else if(res.status==='business_outcome') outcome=\`<div class="notice">Business outcome: <b>\${esc(res.code)}</b> — a legitimate answer from the application, not an automation error.</div>\`;
@@ -113,6 +115,7 @@ async function renderDetail(id){
     <div class="cap"><span class="name">\${esc(run.capability||run.runId)}</span><span class="st \${run.state}">\${stateLabel(run.state)}</span></div>
     <div class="ref">\${esc(run.type)} · \${esc(run.runId)} · requested \${esc(run.requestedAt||'')}</div>
     \${run.error?\`<div class="notice" style="margin-top:8px">\${esc(run.error)}</div>\`:''}
+    \${inputs}
     \${outcome}
     \${timings.length?\`<h2>Step timings</h2><pre>\${esc(timings.join('\\n'))}</pre>\`:''}
     \${stability}
