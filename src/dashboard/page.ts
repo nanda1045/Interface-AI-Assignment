@@ -43,7 +43,7 @@ a{color:#0645ad}.muted{color:var(--muted)}
         <button onclick="sendChat()">Send</button>
       </div>
     </div>
-    <h2>Runs</h2><div id="runs"></div>
+    <h2>Runs</h2><div id="runs" style="max-height:34vh;overflow-y:auto"></div>
     <h2>Run detail</h2><div id="detail"><div class="card muted">Select a run.</div></div>
   </section>
 </main>
@@ -91,7 +91,7 @@ function renderInterventions(list){
 
 async function take(id){const op=($('op_'+id)||{}).value||'operator';await fetch('/api/interventions/'+id+'/take',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({operator:op})});lastIntSig='';poll();}
 async function handBack(id){await fetch('/api/interventions/'+id+'/hand-back',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({})});lastIntSig='';poll();}
-function select(id){selected=id;lastRunSig='';poll();}
+function select(id){selected=id;lastRunSig='';poll().then(()=>{const d=$('detail');if(d)d.scrollIntoView({behavior:'smooth',block:'start'});});}
 
 async function renderDetail(id){
   let run;try{run=await j('/api/runs/'+id);}catch{ $('detail').innerHTML='<div class="card muted">Run not found.</div>';return;}
