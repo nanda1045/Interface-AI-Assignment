@@ -57,6 +57,11 @@ export interface InterventionSummary { count: number; requestIds: string[] }
 
 // Exactly one of success, declared business outcome, or evidence-backed failure.
 export type ReplayResult =
-  | { status: "success"; outputs: Record<string, unknown>; evidence: string; stability: TierStats; intervention?: InterventionSummary }
+  // observedShape carries the LIVE table headers seen per table output (column
+  // labels only, never cell values - the same class of data already stored in
+  // an artifact's column mapping). It lets the eval sweep detect data-shape
+  // drift (a renamed, dropped, or newly-added column) - a different signal from
+  // locator drift, which is about finding an element, not the data's structure.
+  | { status: "success"; outputs: Record<string, unknown>; evidence: string; stability: TierStats; observedShape?: Record<string, string[]>; intervention?: InterventionSummary }
   | { status: "business_outcome"; code: string; data?: Record<string, unknown>; evidence: string; intervention?: InterventionSummary }
   | { status: "failure"; failure: { class: FailureClass; disposition: FailureDisposition; step: string; intent: string; expected: string; observed: string; screenshot?: string; domSnapshot: string; resolutionAttempts?: string }; evidence: string; intervention?: InterventionSummary };

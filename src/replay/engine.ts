@@ -444,6 +444,9 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
     return fail("checkpoint_failed", JSON.stringify(artifact.checkpoint.assert), `Checkpoint did not match at ${finalObservation.url}.`);
   }
   const outputs: Record<string, unknown> = {};
+  // The full live header set per table output, captured for shape-drift
+  // detection. Header labels only - never cell values.
+  const observedShapes: Record<string, string[]> = {};
   for (const extraction of artifact.extract) {
     const resolution = await surface.resolve(extraction.from);
     lastAttempts = resolution.attempts;
@@ -454,6 +457,9 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
       // meaning and a renamed or missing column fails loudly instead of
       // silently shifting every value one place over.
       const snapshot = await surface.readTable(resolution.ref);
+      // Record the live header set (labels only) so the eval sweep can compare
+      // it against the declared columns and flag data-shape drift.
+      observedShapes[extraction.output] = snapshot.headers.map((header) => header.trim()).filter((header) => header !== "");
       const headerIndex = new Map(snapshot.headers.map((header, index) => [header.trim().toLowerCase(), index]));
       const columns = extraction.columns ?? [];
       const missing = columns.filter((column) => !headerIndex.has(column.header.trim().toLowerCase()));
@@ -498,7 +504,7 @@ export async function replay(options: ReplayOptions): Promise<ReplayResult> {
 
   // Success returns outputs plus locator stability and intervention telemetry,
   // then completes the same evidence/redaction lifecycle as every other outcome.
-  const result: ReplayResult = { status: "success", outputs, evidence: logger.directory, stability: stats, ...interventionPart() };
+  const result: ReplayResult = { status: "success", outputs, evidence: logger.directory, stability: stats, ...(Object.keys(observedShapes).length > 0 ? { observedShape: observedShapes } : {}), ...interventionPart() };
   // Persist a structurally redacted copy - short sensitive values included -
   // but return the real outputs to the authorized caller.
   const persisted: ReplayResult = { ...result, outputs: redactOutputs(outputs, artifact.outputs) };

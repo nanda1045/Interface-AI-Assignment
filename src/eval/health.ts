@@ -5,6 +5,7 @@
 // only by falling back to weaker locators is the early warning that the UI is
 // changing under it - the moment to `heal` it before it breaks in front of a user.
 import type { ReplayResult } from "../replay/result.js";
+import { describeShapeDrift, type ShapeDrift } from "./shape.js";
 
 export type Health =
   /** Succeeded and every step matched its strongest locator. */
@@ -32,13 +33,21 @@ export interface HealthVerdict {
 }
 
 // Derive a health verdict from one replay result. Pure: no I/O, no clock.
-export function scoreHealth(result: ReplayResult): HealthVerdict {
+// shapeDrift (from detectShapeDrift) folds in the second, orthogonal signal: a
+// run can match every locator on its strongest tier yet still be drifting because
+// the app restructured the data it reads back.
+export function scoreHealth(result: ReplayResult, shapeDrift: ShapeDrift[] = []): HealthVerdict {
   if (result.status === "success") {
     const tiers = Object.keys(result.stability.matched_tiers).map(Number);
     const weakestTier = tiers.length > 0 ? Math.max(...tiers) : 1;
     const rescued = result.stability.rescued_steps;
-    if (rescued.length > 0) {
-      return { health: "degraded", detail: `rescued ${rescued.join(", ")} to tier ${weakestTier}`, weakestTier, rescued };
+    const shapeNote = describeShapeDrift(shapeDrift);
+    // Either kind of drift means "still succeeds, but the recording is slipping."
+    if (rescued.length > 0 || shapeNote) {
+      const parts: string[] = [];
+      if (rescued.length > 0) parts.push(`rescued ${rescued.join(", ")} to tier ${weakestTier}`);
+      if (shapeNote) parts.push(shapeNote);
+      return { health: "degraded", detail: parts.join("; "), weakestTier, rescued };
     }
     return { health: "healthy", detail: "all steps matched tier 1", weakestTier, rescued: [] };
   }

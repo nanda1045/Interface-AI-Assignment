@@ -27,6 +27,20 @@ describe("scoreHealth", () => {
     const result: ReplayResult = { status: "failure", evidence: "runs/x", failure: { class: "target_not_found", disposition: "fix_capability", step: "s3", intent: "click", expected: "x", observed: "y", domSnapshot: "<html>" } };
     expect(scoreHealth(result)).toMatchObject({ health: "failed", detail: "target_not_found", disposition: "fix_capability" });
   });
+
+  it("degrades a locator-healthy run when the data shape drifted (a new column)", () => {
+    const verdict = scoreHealth(success({ "1": 3 }, []), [{ output: "matches", added: ["Branch"], missing: [] }]);
+    expect(verdict.health).toBe("degraded");
+    expect(verdict.detail).toContain("shape drift");
+    expect(verdict.detail).toContain("Branch");
+  });
+
+  it("combines locator drift and shape drift in one detail line", () => {
+    const verdict = scoreHealth(success({ "1": 2, "2": 1 }, ["s2"]), [{ output: "matches", added: ["Branch"], missing: [] }]);
+    expect(verdict.health).toBe("degraded");
+    expect(verdict.detail).toContain("rescued s2");
+    expect(verdict.detail).toContain("shape drift");
+  });
 });
 
 describe("formatHealthReport", () => {

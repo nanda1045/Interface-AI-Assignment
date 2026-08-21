@@ -21,6 +21,7 @@ import { installHumanRecorder } from "./control/human-recorder.js";
 import { mutationById, uiMutations } from "./eval/mutations.js";
 import { formatStressReport, scoreStress, type StressRow } from "./eval/stress.js";
 import { formatHealthReport, scoreHealth, type HealthRow } from "./eval/health.js";
+import { detectShapeDrift } from "./eval/shape.js";
 import { loadEvalManifest } from "./eval/manifest.js";
 import { createRunId, RunLogger } from "./evidence/run-logger.js";
 import { sweepScreenshots, SCREENSHOT_RETENTION_MS } from "./evidence/retention.js";
@@ -358,7 +359,9 @@ program.command("eval")
         reference: `${id}@${artifact.capability.version}`, params, policy: raw.policy, artifactRoot: raw.artifactRoot,
         headless: raw.headless, ...(auth ? { auth } : {}), runRoot: raw.runRoot, runId: createRunId("replay")
       });
-      rows.push({ capability: id, risk, verdict: scoreHealth(result) });
+      // Fold in data-shape drift (a renamed/added column) on top of locator health.
+      const shapeDrift = result.status === "success" && result.observedShape ? detectShapeDrift(artifact, result.observedShape) : [];
+      rows.push({ capability: id, risk, verdict: scoreHealth(result, shapeDrift) });
     }
 
     console.log(formatHealthReport(rows));

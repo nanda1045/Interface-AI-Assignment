@@ -228,6 +228,12 @@ cron:
   **drifting** (still succeeds, but a step was rescued by a weaker fallback tier — heal it soon), or
   **failed** (with the disposition that says whether a `heal` is the fix). A capability degrading toward
   its fallbacks is the early warning *before* it breaks in front of a user.
+- **Two orthogonal drift signals, not one.** Locator drift ("the button moved") is only half the story.
+  The sweep also captures the **live headers** of every table a capability reads and compares them to the
+  recorded columns, so it flags **data-shape drift** ("the app restructured the results — a column was
+  renamed or added") even on a run that matched every locator perfectly. A capability can succeed and
+  still be quietly slipping; this catches that. Only column *labels* are compared — never cell values,
+  the same class of data already in an artifact's column mapping.
 - **The report ends with an action, never a silent all-clear.** It aggregates counts and prints an
   explicit work-list — which capabilities are drifting and which are broken and should be repaired with
   `heal` — and exits non-zero when anything failed, so CI or a scheduled run can alert.
