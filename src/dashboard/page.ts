@@ -5,30 +5,67 @@
 // stability, events, evidence), and the integrated intervention queue. It reads
 // only through the API, so it can show nothing the API would not already serve.
 export const dashboardHtml = `<!doctype html><html><head><meta charset="utf-8"><title>MERIDIAN Automation Dashboard</title><style>
-:root{--ink:#17202a;--line:#c3ccd6;--head:#173b5f;--muted:#5b6b7b;--ok:#0a7d33;--warn:#a35b00;--bad:#a01515;--wait:#7a4fd0}
-*{box-sizing:border-box}body{font:13px/1.5 system-ui,Segoe UI,sans-serif;margin:0;background:#eef1f4;color:var(--ink)}
-header{background:var(--head);color:#fff;padding:14px 22px}header h1{margin:0;font-size:16px}
-main{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:16px 22px;max-width:1280px;margin:auto}
-.col{min-width:0}h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:18px 0 8px}
-.card{background:#fff;border:1px solid var(--line);border-radius:6px;padding:12px;margin-bottom:8px}
-.cap{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
-.name{font-weight:600}.ref{color:var(--muted);font-size:11px}
-.tag{font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:10px;border:1px solid currentColor;white-space:nowrap}
+:root{
+  --bg:#eaeef3;--panel:#fff;--ink:#1e293b;--muted:#647387;--line:#e4e9f0;--soft:#f2f5f9;
+  --head1:#0e2033;--head2:#1c3a5b;--accent:#2456a6;--accent-d:#1c4585;
+  --ok:#15803d;--ok-bg:#dcfce7;--warn:#b45309;--warn-bg:#fbedcf;--bad:#b91c1c;--bad-bg:#fbe0e0;
+  --wait:#6d28d9;--wait-bg:#ebe6fc;--info:#1d4ed8;--info-bg:#dbe6fb}
+*{box-sizing:border-box}
+body{font:13.5px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+header{background:linear-gradient(120deg,var(--head1),var(--head2));color:#fff;padding:15px 26px;position:sticky;top:0;z-index:10;box-shadow:0 1px 10px rgba(14,32,51,.2)}
+header .wrap{max-width:1300px;margin:auto;display:flex;align-items:center;gap:14px}
+header h1{margin:0;font-size:16px;font-weight:650;letter-spacing:.01em}
+header .sub{color:#b6c5d8;font-size:11.5px;margin-top:3px}
+header .live{margin-left:auto;font-size:11px;color:#cfe0f0;text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:7px}
+header .live::before{content:"";width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 3px rgba(74,222,128,.25);animation:pulse 1.6s infinite}
+main{display:grid;grid-template-columns:356px 1fr;gap:20px;padding:20px 26px;max-width:1300px;margin:auto}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.col{min-width:0}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;margin:20px 0 9px}
+h2:first-child{margin-top:2px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 14px;margin-bottom:9px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.card.draft{border-left:3px solid var(--wait)}
+.card.attention{border-left:3px solid var(--wait);background:linear-gradient(90deg,rgba(109,40,217,.05),var(--panel) 40%)}
+.pill{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--wait);margin-top:5px}
+.cap{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.name{font-weight:600;color:var(--ink)}
+.ref{color:var(--muted);font-size:11px;margin-top:3px;word-break:break-word}
+.tag{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 8px;border-radius:999px;border:1px solid currentColor;background:color-mix(in srgb,currentColor 12%,#fff);white-space:nowrap}
 .read_only{color:var(--ok)}.mutating{color:var(--warn)}.irreversible{color:var(--bad)}
-.run{cursor:pointer}.run:hover{border-color:#8aa}.run.sel{border-color:var(--head);box-shadow:0 0 0 1px var(--head)}
-.st{font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:10px;color:#fff;white-space:nowrap}
-.st.success{background:var(--ok)}.st.failed{background:var(--bad)}.st.business_outcome{background:var(--warn)}
-.st.running,.st.queued{background:#4a6fa5}.st.waiting_for_human,.st.escalated{background:var(--wait)}
-.kv{display:grid;grid-template-columns:130px 1fr;gap:2px 10px}.kv div:nth-child(odd){color:var(--muted)}
-pre{white-space:pre-wrap;word-break:break-word;background:#f6f8fa;border:1px solid var(--line);border-radius:4px;padding:8px;margin:0;font-size:12px}
-table{border-collapse:collapse;width:100%;font-size:12px}td,th{border:1px solid var(--line);padding:3px 6px;text-align:left}
-.ev{font-family:ui-monospace,monospace;font-size:11px;border-bottom:1px dashed var(--line);padding:2px 0}
-.notice{background:#fff6e6;border:1px solid #e3c37a;border-radius:4px;padding:8px;color:var(--warn)}
-button{font:inherit;padding:6px 10px;border:1px solid var(--head);background:var(--head);color:#fff;border-radius:4px;cursor:pointer}
-input{font:inherit;padding:5px 7px;border:1px solid var(--line);border-radius:4px}
-a{color:#0645ad}.muted{color:var(--muted)}
+.run{cursor:pointer;transition:border-color .12s,box-shadow .12s}
+.run:hover{border-color:#b6c6db;box-shadow:0 2px 9px rgba(16,24,40,.09)}
+.run.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(36,86,166,.18)}
+.st{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:3px 9px;border-radius:999px;white-space:nowrap;display:inline-flex;align-items:center}
+.st.success{background:var(--ok-bg);color:var(--ok)}
+.st.failed{background:var(--bad-bg);color:var(--bad)}
+.st.business_outcome{background:var(--warn-bg);color:var(--warn)}
+.st.running,.st.queued{background:var(--info-bg);color:var(--info)}
+.st.waiting_for_human,.st.escalated{background:var(--wait-bg);color:var(--wait)}
+.st.running::before,.st.queued::before,.st.waiting_for_human::before,.st.escalated::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:6px;animation:pulse 1.3s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:4px 12px}.kv div:nth-child(odd){color:var(--muted)}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--soft);border:1px solid var(--line);border-radius:7px;padding:10px;margin:0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+table{border-collapse:collapse;width:100%;font-size:12px;margin-top:4px}
+th{background:var(--soft);font-weight:600}td,th{border:1px solid var(--line);padding:5px 8px;text-align:left}
+tr:nth-child(even) td{background:#fafbfc}
+.ev{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#4a5a6d;border-bottom:1px solid var(--soft);padding:3px 0}
+.ev:last-child{border-bottom:0}
+.notice{background:var(--warn-bg);border:1px solid #eccf93;color:#7c4a06;border-radius:8px;padding:10px 12px;margin-top:4px}
+.notice.bad{background:var(--bad-bg);border-color:#f0b4b4;color:#8a1414}
+button{font:inherit;font-weight:550;padding:7px 13px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:7px;cursor:pointer;transition:background .12s,transform .05s}
+button:hover{background:var(--accent-d)}button:active{transform:translateY(1px)}
+input{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;transition:border-color .12s,box-shadow .12s}
+input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(36,86,166,.14)}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.muted{color:var(--muted)}
+.chatlog{max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:9px;padding:2px}
+.msg{max-width:86%;padding:8px 11px;border-radius:13px;font-size:12.5px;line-height:1.45;word-wrap:break-word}
+.msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:var(--soft);border:1px solid var(--line);border-bottom-left-radius:4px}
+.msg .who{font-size:9px;text-transform:uppercase;letter-spacing:.04em;opacity:.75;font-weight:700;margin-bottom:3px}
+.msg.user .who{color:#dce7f6}
 </style></head><body>
-<header><h1>MERIDIAN Automation Dashboard</h1><div class="muted" style="color:#cdd8e6">record once · replay deterministically · humans hold the irreversible boundary</div></header>
+<header><div class="wrap"><div><h1>MERIDIAN Automation Dashboard</h1><div class="sub">record once · replay deterministically · humans hold the irreversible boundary</div></div><div class="live">Live</div></div></header>
 <main>
   <section class="col">
     <h2>Interventions</h2><div id="interventions"><div class="card muted">None waiting.</div></div>
@@ -38,7 +75,7 @@ a{color:#0645ad}.muted{color:var(--muted)}
   <section class="col">
     <h2>Chatbot</h2>
     <div class="card">
-      <div id="chatlog" style="max-height:280px;overflow:auto"><div class="muted">Ask about members, balances, shares. Data-changing requests ask to confirm; transfers and holds pause for a human.</div></div>
+      <div id="chatlog" class="chatlog"><div class="muted">Ask about members, balances, shares. Data-changing requests ask to confirm; transfers and holds pause for a human.</div></div>
       <div style="display:flex;gap:6px;margin-top:8px">
         <input id="chatinput" style="flex:1" placeholder="e.g. find members named Turing" onkeydown="if(event.key==='Enter')sendChat()">
         <button onclick="sendChat()">Send</button>
@@ -78,9 +115,9 @@ function renderDrafts(list){
   const sig=JSON.stringify(list.map(d=>[d.reference,!!d.repair]));if(sig===lastDraftSig)return;lastDraftSig=sig;
   $('drafts').innerHTML=list.map(d=>{
     const r=d.repair;
-    const head=r?'proposed repair — awaiting approval':'draft — awaiting approval';
+    const head=r?'Proposed repair — awaiting approval':'Draft — awaiting approval';
     const detail=r?\`from \${esc(r.from_version)} · step \${esc(r.step)} · ladder \${esc(r.strategies_before)}→\${esc(r.strategies_after)}\`:'';
-    return \`<div class="card"><div class="cap"><span class="name">\${esc(d.id)}</span><span class="tag \${esc(d.risk)}">\${esc(d.risk.replace('_',' '))}</span></div><div class="ref">\${esc(d.reference)} · \${head}</div>\${detail?\`<div class="ref">\${detail}</div>\`:''}</div>\`;
+    return \`<div class="card draft"><div class="cap"><span class="name">\${esc(d.id)}</span><span class="tag \${esc(d.risk)}">\${esc(d.risk.replace('_',' '))}</span></div><div class="ref">\${esc(d.reference)}</div><div class="pill">\${head}</div>\${detail?\`<div class="ref">\${detail}</div>\`:''}</div>\`;
   }).join('')||'<div class="card muted">None.</div>';
 }
 
@@ -97,7 +134,7 @@ function renderInterventions(list){
     const controls=i.status==='waiting'
       ?\`<input id="op_\${esc(i.id)}" value="operator@interface.test"> <button onclick="take('\${esc(i.id)}')">Take control</button>\`
       :i.status==='human_control'?\`<button onclick="handBack('\${esc(i.id)}')">Hand back</button>\`:'';
-    return \`<div class="card"><div class="cap"><span class="name">\${esc(i.capability)} · \${esc(i.step)}</span><span class="st waiting_for_human">\${esc(i.status)}</span></div><div class="ref">\${esc(i.reason||i.intent||'')}</div><div style="margin-top:6px">\${controls}</div></div>\`;
+    return \`<div class="card attention"><div class="cap"><span class="name">\${esc(i.capability)} · \${esc(i.step)}</span><span class="st waiting_for_human">\${esc(i.status)}</span></div><div class="ref">\${esc(i.reason||i.intent||'')}</div><div style="margin-top:8px">\${controls}</div></div>\`;
   }).join('');
 }
 
@@ -119,7 +156,7 @@ async function renderDetail(id){
   let outcome='';
   if(res.status==='success') outcome=\`<h2>Outputs</h2><pre>\${esc(JSON.stringify(res.outputs,null,2))}</pre>\`;
   else if(res.status==='business_outcome') outcome=\`<div class="notice">Business outcome: <b>\${esc(res.code)}</b> — a legitimate answer from the application, not an automation error.</div>\`;
-  else if(res.status==='failure'&&res.failure) outcome=\`<div class="notice">Failure — class <b>\${esc(res.failure.class)}</b>, disposition <b>\${esc(res.failure.disposition)}</b>. \${esc(res.failure.observed||'')}</div>\`;
+  else if(res.status==='failure'&&res.failure) outcome=\`<div class="notice bad">Failure — class <b>\${esc(res.failure.class)}</b>, disposition <b>\${esc(res.failure.disposition)}</b>. \${esc(res.failure.observed||'')}</div>\`;
   const stability=res.stability?\`<h2>Stability</h2><div class="kv"><div>Resolutions</div><div>\${res.stability.resolutions}</div><div>Matched strategies</div><div>\${esc(JSON.stringify(res.stability.matched_strategies))}</div></div>\`:'';
   const shots=files.filter(f=>/\\.png$/.test(f));
   const evidence=files.length?\`<h2>Evidence</h2>\${withheld?'<div class="notice">Screenshots were withheld from this run because a sensitive value was on screen; they cannot be redacted, so they are not saved.</div>':''}<div>\${files.map(f=>\`<a href="/api/runs/\${esc(id)}/evidence/\${esc(f)}" target="_blank">\${esc(f)}</a>\`).join(' · ')}</div>\${shots.map(f=>\`<div><img style="max-width:100%;border:1px solid #ccc;margin-top:6px" src="/api/runs/\${esc(id)}/evidence/\${esc(f)}"></div>\`).join('')}\`:'';
@@ -155,12 +192,12 @@ let chatlog=[], pendingMessage=null, chatBusy=false;
 const actionTag=a=>({answered:'#0a7d33',clarification:'#4a6fa5',unsupported:'#5b6b7b',confirmation_required:'#a35b00',human_required:'#a01515',error:'#a01515'}[a]||'#5b6b7b');
 function renderChat(){
   $('chatlog').innerHTML=chatlog.map((m,i)=>{
-    if(m.role==='user')return \`<div style="margin:6px 0"><b>You:</b> \${esc(m.text)}</div>\`;
-    const tag=m.action?\`<span class="tag" style="color:\${actionTag(m.action)}">\${esc(m.action)}</span> \`:'';
+    if(m.role==='user')return \`<div class="msg user"><div class="who">You</div>\${esc(m.text)}</div>\`;
+    const tag=m.action?\` <span class="tag" style="color:\${actionTag(m.action)}">\${esc(m.action)}</span>\`:'';
     const isLast=i===chatlog.length-1;
-    const confirm=(m.action==='confirmation_required'&&isLast&&pendingMessage)?\` <button onclick="confirmChat()">Confirm &amp; run</button>\`:'';
-    return \`<div style="margin:6px 0"><b>Bot:</b> \${tag}\${esc(m.text)}\${confirm}</div>\`;
-  }).join('');
+    const confirm=(m.action==='confirmation_required'&&isLast&&pendingMessage)?\`<div style="margin-top:8px"><button onclick="confirmChat()">Confirm &amp; run</button></div>\`:'';
+    return \`<div class="msg bot"><div class="who">Assistant\${tag}</div>\${esc(m.text)}\${confirm}</div>\`;
+  }).join('')||'<div class="muted">Ask about members, balances, shares. Data-changing requests ask to confirm; transfers and holds pause for a human.</div>';
   $('chatlog').scrollTop=$('chatlog').scrollHeight;
 }
 async function sendChat(message,confirm){
