@@ -33,6 +33,7 @@ a{color:#0645ad}.muted{color:var(--muted)}
   <section class="col">
     <h2>Interventions</h2><div id="interventions"><div class="card muted">None waiting.</div></div>
     <h2>Capabilities</h2><div id="catalog"></div>
+    <h2>Proposed repairs</h2><div id="drafts"><div class="card muted">None.</div></div>
   </section>
   <section class="col">
     <h2>Chatbot</h2>
@@ -49,15 +50,16 @@ a{color:#0645ad}.muted{color:var(--muted)}
 </main>
 <script>
 const $=id=>document.getElementById(id);
-let selected=null, lastRunSig='', lastCapSig='', lastIntSig='';
+let selected=null, lastRunSig='', lastCapSig='', lastIntSig='', lastDraftSig='';
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const stateLabel=s=>({queued:'Queued',running:'Running',waiting_for_human:'Escalated — waiting for human',escalated:'Escalated — waiting for human',success:'Success',business_outcome:'Business outcome',failed:'Failed'}[s]||s);
 async function j(u){const r=await fetch(u);if(!r.ok)throw new Error(u+' '+r.status);return r.json();}
 
 async function poll(){
   try{
-    const [caps,runs,ints]=await Promise.all([j('/api/capabilities'),j('/api/runs'),j('/api/interventions')]);
+    const [caps,runs,ints,drafts]=await Promise.all([j('/api/capabilities'),j('/api/runs'),j('/api/interventions'),j('/api/drafts')]);
     renderCatalog(caps.capabilities||[]);
+    renderDrafts(drafts.drafts||[]);
     // A run with a pending intervention is paused for a human right now, even if
     // its stored state has not been rewritten - show that plainly.
     const waiting=new Set((ints||[]).filter(i=>i.status==='waiting'||i.status==='human_control').map(i=>i.runId));
@@ -70,6 +72,16 @@ async function poll(){
 function renderCatalog(list){
   const sig=JSON.stringify(list.map(c=>[c.reference,c.risk]));if(sig===lastCapSig)return;lastCapSig=sig;
   $('catalog').innerHTML=list.map(c=>\`<div class="card"><div class="cap"><span class="name">\${esc(c.tool.name)}</span><span class="tag \${c.risk}">\${c.risk.replace('_',' ')}</span></div><div class="ref">\${esc(c.reference)}\${c.requires_human?' · needs human':''}</div></div>\`).join('')||'<div class="card muted">No approved capabilities.</div>';
+}
+
+function renderDrafts(list){
+  const sig=JSON.stringify(list.map(d=>[d.reference,!!d.repair]));if(sig===lastDraftSig)return;lastDraftSig=sig;
+  $('drafts').innerHTML=list.map(d=>{
+    const r=d.repair;
+    const head=r?'proposed repair — awaiting approval':'draft — awaiting approval';
+    const detail=r?\`from \${esc(r.from_version)} · step \${esc(r.step)} · ladder \${esc(r.strategies_before)}→\${esc(r.strategies_after)}\`:'';
+    return \`<div class="card"><div class="cap"><span class="name">\${esc(d.id)}</span><span class="tag \${esc(d.risk)}">\${esc(d.risk.replace('_',' '))}</span></div><div class="ref">\${esc(d.reference)} · \${head}</div>\${detail?\`<div class="ref">\${detail}</div>\`:''}</div>\`;
+  }).join('')||'<div class="card muted">None.</div>';
 }
 
 function renderRuns(list,waiting){

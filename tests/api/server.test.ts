@@ -119,6 +119,27 @@ describe("adaptation API", () => {
     expect((await post("/api/runs", { capability: "draft_cap", inputs: { member_id: "4521" } })).status).toBe(404);
   });
 
+  it("lists drafts for review and surfaces self-healing repair provenance", async () => {
+    const repair = structuredClone(validArtifact) as CapabilityArtifact;
+    repair.capability = { ...repair.capability, id: "healed_cap", version: "1.1.0", status: "draft",
+      provenance: { ...repair.capability.provenance, repair: { from_version: "1.0.0", from_run: "replay_x", step: "s1", strategies_before: 3, strategies_after: 2, repaired_at: "2026-08-21T00:00:00.000Z" } } };
+    await store.write(repair);
+    await boot();
+    const { status, body } = await get("/api/drafts");
+    expect(status).toBe(200);
+    const drafts = body.drafts as { id: string; reference: string; repair: Record<string, unknown> | null }[];
+    const ids = drafts.map((draft) => draft.id);
+    expect(ids).toContain("draft_cap");   // a plain draft
+    expect(ids).toContain("healed_cap");  // the repair draft
+    // Approved capabilities are never listed here - this is a review surface only.
+    expect(ids).not.toContain("read_cap");
+    const healed = drafts.find((draft) => draft.id === "healed_cap");
+    expect(healed?.reference).toBe("healed_cap@1.1.0");
+    expect(healed?.repair).toMatchObject({ from_version: "1.0.0", step: "s1", strategies_before: 3, strategies_after: 2 });
+    // A plain draft carries no repair provenance.
+    expect(drafts.find((draft) => draft.id === "draft_cap")?.repair).toBeNull();
+  });
+
   it("gates an ordinary mutation behind envelope confirmation", async () => {
     await boot();
     const denied = await post("/api/runs", { capability: "mutate_cap", inputs: { member_id: "4521" } });

@@ -91,6 +91,20 @@ export class ArtifactStore {
     return found;
   }
 
+  /** Every draft version across all capabilities. This is for review surfaces
+   *  (the dashboard's proposed-repairs panel) - it is explicitly NOT a way to
+   *  choose what to run, which stays limited to approved() and exact pins. */
+  public async drafts(): Promise<CapabilityArtifact[]> {
+    const found: CapabilityArtifact[] = [];
+    for (const id of await this.capabilityIds()) {
+      for (const candidate of await this.versionsOf(id)) {
+        const artifact = await this.readExact(id, candidate.version);
+        if (artifact.capability.status === "draft") found.push(artifact);
+      }
+    }
+    return found;
+  }
+
   // Distinct capability names, which is what someone naming one without a
   // version needs to see when they get it wrong.
   public async capabilityIds(): Promise<string[]> {

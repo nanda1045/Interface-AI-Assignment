@@ -84,6 +84,24 @@ export function createApiApp(deps: ApiDependencies) {
     } catch (error) { next(error); }
   });
 
+  // Draft versions awaiting human approval - a review surface, never runnable
+  // from here. A draft carrying `repair` provenance is a self-healing proposal:
+  // the dashboard shows it as "proposed repair — awaiting approval". This is
+  // strictly read-only metadata; approval still happens through the CLI gate.
+  app.get("/api/drafts", async (_request, response, next) => {
+    try {
+      const drafts = await deps.store.drafts();
+      response.json({ drafts: drafts.map((artifact) => ({
+        reference: `${artifact.capability.id}@${artifact.capability.version}`,
+        id: artifact.capability.id,
+        version: artifact.capability.version,
+        risk: artifact.capability.risk,
+        title: artifact.capability.title,
+        repair: artifact.capability.provenance.repair ?? null
+      })) });
+    } catch (error) { next(error); }
+  });
+
   app.post("/api/runs", async (request, response, next) => {
     try {
       const parsed = runRequestSchema.safeParse(request.body);
